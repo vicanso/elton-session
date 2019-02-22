@@ -1,4 +1,4 @@
-package codsession
+package session
 
 import (
 	"bytes"

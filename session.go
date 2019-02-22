@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codsession
+package session
 
 import (
+	"encoding/json"
 	"math/rand"
 	"net/http"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/cast"
 	"github.com/vicanso/cod"
-	"github.com/vicanso/cod/middleware"
 	"github.com/vicanso/hes"
 )
 
@@ -44,33 +43,45 @@ var (
 	ErrDuplicateCommit = createError("duplicate commit")
 	// ErrIDNil session id is nil
 	ErrIDNil = createError("session id is nil")
-	json     = jsoniter.ConfigCompatibleWithStandardLibrary
 )
 
 type (
-	// CookieConfig cookie config
+	// M alias
+	M map[string]interface{}
+	// Config session middleware config
+	Config struct {
+		// Store session store
+		Store Store
+		// Skipper skipper
+		Skipper cod.Skipper
+		// Expired session store's max age
+		Expired time.Duration
+		// GenID generate uid
+		GenID func() string
+
+		Get func(c *cod.Context) (string, error)
+		Set func(c *cod.Context, id string) error
+	}
+	// CookieConfig session cookie config
 	CookieConfig struct {
+		// Store session store
+		Store Store
+		// Skipper skipper
+		Skipper cod.Skipper
+		// Expired session store's max age
+		Expired time.Duration
+		// GenID generate uid
+		GenID func() string
+
+		// Signed signed cookie
+		Signed bool
+		// Cookie cookie config
 		Name     string
 		Path     string
 		Domain   string
 		MaxAge   int
 		Secure   bool
 		HttpOnly bool
-	}
-	// SessionConfig session middleware config
-	SessionConfig struct {
-		// Store session store
-		Store Store
-		// Signed signed cookie
-		Signed bool
-		// MaxAge session store's max age
-		MaxAge time.Duration
-		// UID generate uid
-		UID func() string
-		// Cookie cookie config
-		Cookie CookieConfig
-		// Skipper skipper
-		Skipper middleware.Skipper
 	}
 	// Session session struct
 	Session struct {
@@ -79,7 +90,7 @@ type (
 		// ID the session id
 		ID string
 		// the data fetch from session
-		data cod.M
+		data M
 		// the data has been fetched
 		fetched bool
 		// the data has been modified
@@ -129,14 +140,14 @@ func wrapError(err error) *hes.Error {
 	return he
 }
 
-func getInitMap() cod.M {
-	m := make(cod.M)
+func getInitMap() M {
+	m := make(M)
 	m[CreatedAt] = time.Now().Format(time.RFC3339)
 	return m
 }
 
 // Fetch fetch the session data from store
-func (s *Session) Fetch() (m cod.M, err error) {
+func (s *Session) Fetch() (m M, err error) {
 	if s.fetched {
 		m = s.data
 		return
@@ -149,7 +160,7 @@ func (s *Session) Fetch() (m cod.M, err error) {
 			return
 		}
 	}
-	m = make(cod.M)
+	m = make(M)
 	if len(buf) == 0 {
 		m = getInitMap()
 	} else {
@@ -270,7 +281,7 @@ func (s *Session) GetUpdatedAt() string {
 }
 
 // GetData get the session's data
-func (s *Session) GetData() cod.M {
+func (s *Session) GetData() M {
 	return s.data
 }
 
@@ -301,35 +312,34 @@ func (s *Session) Commit(ttl time.Duration) (err error) {
 	return
 }
 
+// TODO 生成 GET/SET id 的函数
+
 // NewSession create a new session middleware
-func NewSession(config SessionConfig) cod.Handler {
-	if config.Store == nil ||
-		config.UID == nil ||
-		config.MaxAge.Nanoseconds() == 0 ||
-		config.Cookie.Name == "" {
-		panic("require store, maxAge, uid function and cookie's name")
-	}
+func NewSession(config Config) cod.Handler {
 	store := config.Store
-	signed := config.Signed
-	maxAge := config.MaxAge
-	generateUID := config.UID
-	cookieConfig := config.Cookie
+	getID := config.Get
+	setID := config.Set
+	genID := config.GenID
+	expired := config.Expired
+	if store == nil ||
+		getID == nil ||
+		setID == nil ||
+		genID == nil ||
+		expired.Nanoseconds() == 0 {
+		panic("require store, get function, set function and expired")
+	}
 	return func(c *cod.Context) (err error) {
 		s := &Session{
 			Store: store,
 		}
-		getCookie := c.Cookie
-		setCookie := c.AddCookie
-		// cookie 使用signed的方式
-		if signed {
-			getCookie = c.SignedCookie
-			setCookie = c.AddSignedCookie
-		}
-
 		// cookie只会因为获取不到而报错，因此忽略
-		cookie, _ := getCookie(cookieConfig.Name)
-		if cookie != nil {
-			s.ID = cookie.Value
+		id, err := getID(c)
+		if err != nil {
+			err = wrapError(err)
+			return
+		}
+		if id != "" {
+			s.ID = id
 		}
 		// 拉取session（默认都拉取，未做动态拉取）
 		_, err = s.Fetch()
@@ -348,16 +358,8 @@ func NewSession(config SessionConfig) cod.Handler {
 		if s.modified {
 			// 如果session 有修改而且未生成session id
 			if s.ID == "" {
-				uid := generateUID()
-				err = setCookie(&http.Cookie{
-					Name:     cookieConfig.Name,
-					Value:    uid,
-					Path:     cookieConfig.Path,
-					Domain:   cookieConfig.Domain,
-					MaxAge:   cookieConfig.MaxAge,
-					Secure:   cookieConfig.Secure,
-					HttpOnly: cookieConfig.HttpOnly,
-				})
+				uid := genID()
+				err = setID(c, uid)
 				if err != nil {
 					err = wrapError(err)
 					return
@@ -365,11 +367,52 @@ func NewSession(config SessionConfig) cod.Handler {
 				s.ID = uid
 			}
 			// 提交session 数据
-			err = s.Commit(maxAge)
+			err = s.Commit(expired)
 			if err != nil {
 				err = wrapError(err)
 			}
 		}
 		return
 	}
+}
+
+// NewSessionWithCookie create a session with cookie
+func NewSessionWithCookie(config CookieConfig) cod.Handler {
+	getID := func(c *cod.Context) (string, error) {
+		getCookie := c.Cookie
+		if config.Signed {
+			getCookie = c.SignedCookie
+		}
+		// cookie只会因为获取不到而报错，因此忽略
+		cookie, _ := getCookie(config.Name)
+		if cookie == nil {
+			return "", nil
+		}
+		return cookie.Value, nil
+	}
+	setID := func(c *cod.Context, id string) (err error) {
+		setCookie := c.AddCookie
+		if config.Signed {
+			setCookie = c.AddSignedCookie
+		}
+
+		err = setCookie(&http.Cookie{
+			Name:     config.Name,
+			Value:    id,
+			Path:     config.Path,
+			Domain:   config.Domain,
+			MaxAge:   config.MaxAge,
+			Secure:   config.Secure,
+			HttpOnly: config.HttpOnly,
+		})
+		return
+	}
+
+	return NewSession(Config{
+		Store:   config.Store,
+		Get:     getID,
+		Set:     setID,
+		GenID:   config.GenID,
+		Expired: config.Expired,
+	})
 }

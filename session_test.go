@@ -1,4 +1,4 @@
-package codsession
+package session
 
 import (
 	"errors"
@@ -219,21 +219,19 @@ func TestSessionMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new memory store fail, %v", err)
 	}
-	fn := NewSession(SessionConfig{
-		Store:  store,
-		Signed: true,
-		MaxAge: 10 * time.Millisecond,
-		UID: func() string {
+	fn := NewSessionWithCookie(CookieConfig{
+		Store:   store,
+		Signed:  true,
+		Expired: 10 * time.Millisecond,
+		GenID: func() string {
 			return "abcd"
 		},
-		Cookie: CookieConfig{
-			Name:     "jt",
-			Path:     "/",
-			Domain:   "abc.com",
-			MaxAge:   60,
-			Secure:   true,
-			HttpOnly: true,
-		},
+		Name:     "jt",
+		Path:     "/",
+		Domain:   "abc.com",
+		MaxAge:   60,
+		Secure:   true,
+		HttpOnly: true,
 	})
 	req := httptest.NewRequest("GET", "/users/me", nil)
 	resp := httptest.NewRecorder()
