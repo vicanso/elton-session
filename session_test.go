@@ -209,6 +209,8 @@ func TestNotFetchError(t *testing.T) {
 }
 
 func TestSessionMiddleware(t *testing.T) {
+	uid := "abcd"
+	idName := "jt"
 	d := &cod.Cod{
 		Keys: []string{
 			"secret",
@@ -219,59 +221,108 @@ func TestSessionMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new memory store fail, %v", err)
 	}
-	fn := NewSessionWithCookie(CookieConfig{
+
+	cookieSessionMiddleware := NewSessionByCookie(CookieConfig{
 		Store:   store,
 		Signed:  true,
 		Expired: 10 * time.Millisecond,
 		GenID: func() string {
-			return "abcd"
+			return uid
 		},
-		Name:     "jt",
+		Name:     idName,
 		Path:     "/",
 		Domain:   "abc.com",
 		MaxAge:   60,
 		Secure:   true,
 		HttpOnly: true,
 	})
-	req := httptest.NewRequest("GET", "/users/me", nil)
-	resp := httptest.NewRecorder()
-	c := cod.NewContext(resp, req)
-	// 必须 cod 实例有配置密钥才会生成 signed cookie
-	c.Cod(d)
-	c.Next = func() error {
-		se := c.Get(SessionKey).(*Session)
-		se.Set("foo", "bar")
-		return nil
-	}
-	err = fn(c)
-	if err != nil {
-		t.Fatalf("session middleware fail, %v", err)
-	}
-	if strings.Join(c.Headers["Set-Cookie"], ",") != "jt=abcd; Path=/; Domain=abc.com; Max-Age=60; HttpOnly; Secure,jt.sig=sE80Oh3EoVzvllgRnFRBHy5As0U; Path=/; Domain=abc.com; Max-Age=60; HttpOnly; Secure" {
-		t.Fatalf("set signed cookie fail")
-	}
 
-	req = httptest.NewRequest("GET", "/users/me", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "jt",
-		Value: "abcd",
-	})
-	req.AddCookie(&http.Cookie{
-		Name:  "jt.sig",
-		Value: "sE80Oh3EoVzvllgRnFRBHy5As0U",
-	})
-	resp = httptest.NewRecorder()
-	c = cod.NewContext(resp, req)
-	c.Cod(d)
-	c.Next = func() error {
-		se := c.Get(SessionKey).(*Session)
-		if se.GetString("foo") != "bar" {
-			return errors.New("get session fail")
+	t.Run("session by cookie", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/users/me", nil)
+		resp := httptest.NewRecorder()
+		c := cod.NewContext(resp, req)
+		// 必须 cod 实例有配置密钥才会生成 signed cookie
+		c.Cod(d)
+		c.Next = func() error {
+			se := c.Get(Key).(*Session)
+			se.Set("foo", "bar")
+			return nil
 		}
-		return nil
-	}
-	err = fn(c)
-	if err != nil {
-		t.Fatalf("session middleware fail, %v", err)
-	}
+		err = cookieSessionMiddleware(c)
+		if err != nil {
+			t.Fatalf("session by cookie middleware fail, %v", err)
+		}
+		if strings.Join(c.Headers["Set-Cookie"], ",") != "jt=abcd; Path=/; Domain=abc.com; Max-Age=60; HttpOnly; Secure,jt.sig=sE80Oh3EoVzvllgRnFRBHy5As0U; Path=/; Domain=abc.com; Max-Age=60; HttpOnly; Secure" {
+			t.Fatalf("set signed cookie fail")
+		}
+
+		req = httptest.NewRequest("GET", "/users/me", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  idName,
+			Value: uid,
+		})
+		req.AddCookie(&http.Cookie{
+			Name:  "jt.sig",
+			Value: "sE80Oh3EoVzvllgRnFRBHy5As0U",
+		})
+		resp = httptest.NewRecorder()
+		c = cod.NewContext(resp, req)
+		c.Cod(d)
+		c.Next = func() error {
+			se := c.Get(Key).(*Session)
+			if se.GetString("foo") != "bar" {
+				return errors.New("get session fail")
+			}
+			return nil
+		}
+		err = cookieSessionMiddleware(c)
+		if err != nil {
+			t.Fatalf("session by cookie middleware fail, %v", err)
+		}
+	})
+
+	headerSessionMiddleware := NewSessionByHeader(HeaderConfig{
+		Store:   store,
+		Expired: 10 * time.Millisecond,
+		GenID: func() string {
+			return uid
+		},
+		Name: idName,
+	})
+
+	t.Run("session by header", func(t *testing.T) {
+
+		req := httptest.NewRequest("GET", "/users/me", nil)
+		resp := httptest.NewRecorder()
+		c := cod.NewContext(resp, req)
+		c.Next = func() error {
+			se := c.Get(Key).(*Session)
+			se.Set("foo", "bar")
+			return nil
+		}
+		err = headerSessionMiddleware(c)
+		if err != nil {
+			t.Fatalf("session by header middleware fail, %v", err)
+		}
+		if c.GetHeader(idName) != uid {
+			t.Fatalf("set header value fail")
+		}
+
+		req = httptest.NewRequest("GET", "/users/me", nil)
+		req.Header.Set(idName, uid)
+
+		resp = httptest.NewRecorder()
+		c = cod.NewContext(resp, req)
+		c.Next = func() error {
+			se := c.Get(Key).(*Session)
+			if se.GetString("foo") != "bar" {
+				return errors.New("get session fail")
+			}
+			return nil
+		}
+		err = headerSessionMiddleware(c)
+		if err != nil {
+			t.Fatalf("session by header middleware fail, %v", err)
+		}
+	})
 }

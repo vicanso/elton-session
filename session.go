@@ -32,8 +32,8 @@ const (
 	UpdatedAt = "_updatedAt"
 	// ErrCategorySession session error category
 	ErrCategorySession = "cod-session"
-	// SessionKey session key
-	SessionKey = "_session"
+	// Key session key
+	Key = "_session"
 )
 
 var (
@@ -82,6 +82,20 @@ type (
 		MaxAge   int
 		Secure   bool
 		HttpOnly bool
+	}
+	// HeaderConfig session header config
+	HeaderConfig struct {
+		// Store session store
+		Store Store
+		// Skipper skipper
+		Skipper cod.Skipper
+		// Expired session store's max age
+		Expired time.Duration
+		// GenID generate uid
+		GenID func() string
+
+		// Name header's name
+		Name string
 	}
 	// Session session struct
 	Session struct {
@@ -312,8 +326,6 @@ func (s *Session) Commit(ttl time.Duration) (err error) {
 	return
 }
 
-// TODO 生成 GET/SET id 的函数
-
 // NewSession create a new session middleware
 func NewSession(config Config) cod.Handler {
 	store := config.Store
@@ -349,7 +361,7 @@ func NewSession(config Config) cod.Handler {
 		}
 
 		// session 保存至context中
-		c.Set(SessionKey, s)
+		c.Set(Key, s)
 		// 其它中间件的异常，不需要wrap
 		err = c.Next()
 		if err != nil {
@@ -376,8 +388,11 @@ func NewSession(config Config) cod.Handler {
 	}
 }
 
-// NewSessionWithCookie create a session with cookie
-func NewSessionWithCookie(config CookieConfig) cod.Handler {
+// NewSessionByCookie create a session by cookie, which get session id from cookie
+func NewSessionByCookie(config CookieConfig) cod.Handler {
+	if config.Name == "" {
+		panic("require cookie's name")
+	}
 	getID := func(c *cod.Context) (string, error) {
 		getCookie := c.Cookie
 		if config.Signed {
@@ -396,6 +411,7 @@ func NewSessionWithCookie(config CookieConfig) cod.Handler {
 			setCookie = c.AddSignedCookie
 		}
 
+		// 设置cookie
 		err = setCookie(&http.Cookie{
 			Name:     config.Name,
 			Value:    id,
@@ -408,6 +424,28 @@ func NewSessionWithCookie(config CookieConfig) cod.Handler {
 		return
 	}
 
+	return NewSession(Config{
+		Store:   config.Store,
+		Get:     getID,
+		Set:     setID,
+		GenID:   config.GenID,
+		Expired: config.Expired,
+	})
+}
+
+// NewSessionByHeader create a session by header, which get session id from request header
+func NewSessionByHeader(config HeaderConfig) cod.Handler {
+	if config.Name == "" {
+		panic("require header's name")
+	}
+	getID := func(c *cod.Context) (string, error) {
+		id := c.GetRequestHeader(config.Name)
+		return id, nil
+	}
+	setID := func(c *cod.Context, id string) (err error) {
+		c.SetHeader(config.Name, id)
+		return
+	}
 	return NewSession(Config{
 		Store:   config.Store,
 		Get:     getID,
