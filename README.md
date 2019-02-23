@@ -4,7 +4,7 @@
 
 session middleware for cod.
 
-## NewSessionByCookie
+## NewByCookie
 
 Get session id from cookie(signed).
 
@@ -30,7 +30,7 @@ func main() {
 		"cuttlefish",
 	}
 
-	d.Use(session.NewSessionByCookie(session.CookieConfig{
+	d.Use(session.NewByCookie(session.CookieConfig{
 		Store:   store,
 		Signed:  true,
 		Expired: 10 * time.Hour,
@@ -56,7 +56,7 @@ func main() {
 }
 ```
 
-## NewSessionByHeader
+## NewByHeader
 
 Get session id from http header.
 
@@ -82,7 +82,7 @@ func main() {
 		"cuttlefish",
 	}
 
-	d.Use(session.NewSessionByHeader(session.HeaderConfig{
+	d.Use(session.NewByHeader(session.HeaderConfig{
 		Store:   store,
 		Expired: 10 * time.Hour,
 		GenID: func() string {

@@ -222,7 +222,7 @@ func TestSessionMiddleware(t *testing.T) {
 		t.Fatalf("new memory store fail, %v", err)
 	}
 
-	cookieSessionMiddleware := NewSessionByCookie(CookieConfig{
+	cookieSessionMiddleware := NewByCookie(CookieConfig{
 		Store:   store,
 		Signed:  true,
 		Expired: 10 * time.Millisecond,
@@ -281,7 +281,7 @@ func TestSessionMiddleware(t *testing.T) {
 		}
 	})
 
-	headerSessionMiddleware := NewSessionByHeader(HeaderConfig{
+	headerSessionMiddleware := NewByHeader(HeaderConfig{
 		Store:   store,
 		Expired: 10 * time.Millisecond,
 		GenID: func() string {

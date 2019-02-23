@@ -326,8 +326,8 @@ func (s *Session) Commit(ttl time.Duration) (err error) {
 	return
 }
 
-// NewSession create a new session middleware
-func NewSession(config Config) cod.Handler {
+// New create a new session middleware
+func New(config Config) cod.Handler {
 	store := config.Store
 	getID := config.Get
 	setID := config.Set
@@ -395,8 +395,8 @@ func NewSession(config Config) cod.Handler {
 	}
 }
 
-// NewSessionByCookie create a session by cookie, which get session id from cookie
-func NewSessionByCookie(config CookieConfig) cod.Handler {
+// NewByCookie create a session by cookie, which get session id from cookie
+func NewByCookie(config CookieConfig) cod.Handler {
 	if config.Name == "" {
 		panic("require cookie's name")
 	}
@@ -431,7 +431,7 @@ func NewSessionByCookie(config CookieConfig) cod.Handler {
 		return
 	}
 
-	return NewSession(Config{
+	return New(Config{
 		Store:   config.Store,
 		Get:     getID,
 		Set:     setID,
@@ -440,8 +440,8 @@ func NewSessionByCookie(config CookieConfig) cod.Handler {
 	})
 }
 
-// NewSessionByHeader create a session by header, which get session id from request header
-func NewSessionByHeader(config HeaderConfig) cod.Handler {
+// NewByHeader create a session by header, which get session id from request header
+func NewByHeader(config HeaderConfig) cod.Handler {
 	if config.Name == "" {
 		panic("require header's name")
 	}
@@ -453,7 +453,7 @@ func NewSessionByHeader(config HeaderConfig) cod.Handler {
 		c.SetHeader(config.Name, id)
 		return
 	}
-	return NewSession(Config{
+	return New(Config{
 		Store:   config.Store,
 		Get:     getID,
 		Set:     setID,
