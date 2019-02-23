@@ -340,7 +340,14 @@ func NewSession(config Config) cod.Handler {
 		expired.Nanoseconds() == 0 {
 		panic("require store, get function, set function and expired")
 	}
+	skipper := config.Skipper
+	if skipper == nil {
+		skipper = cod.DefaultSkipper
+	}
 	return func(c *cod.Context) (err error) {
+		if skipper(c) {
+			return c.Next()
+		}
 		s := &Session{
 			Store: store,
 		}
