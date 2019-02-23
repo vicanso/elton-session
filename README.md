@@ -4,7 +4,7 @@
 
 session middleware for cod.
 
-## get session id from cookie
+## NewSessionByCookie
 
 Get session id from cookie(signed).
 
@@ -56,7 +56,7 @@ func main() {
 }
 ```
 
-## get session id from http header
+## NewSessionByHeader
 
 Get session id from http header.
 
