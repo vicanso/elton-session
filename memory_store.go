@@ -15,15 +15,21 @@
 package session
 
 import (
-	"errors"
+	"net/http"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/vicanso/hes"
 )
 
 var (
 	// ErrNotInit error not init
-	ErrNotInit = errors.New("client not init")
+	ErrNotInit = &hes.Error{
+		Message:    "client not init",
+		Category:   ErrCategory,
+		StatusCode: http.StatusInternalServerError,
+		Exception:  true,
+	}
 )
 
 type (

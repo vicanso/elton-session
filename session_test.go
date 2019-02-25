@@ -17,7 +17,7 @@ func TestWrapError(t *testing.T) {
 	err = wrapError(err)
 	he, _ := err.(*hes.Error)
 	if !he.Exception ||
-		he.Category != ErrCategorySession {
+		he.Category != ErrCategory {
 		t.Fatalf("wrap error fail")
 	}
 }

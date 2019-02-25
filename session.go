@@ -15,11 +15,11 @@
 package session
 
 import (
-	"encoding/json"
 	"math/rand"
 	"net/http"
 	"time"
 
+	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/cast"
 	"github.com/vicanso/cod"
 	"github.com/vicanso/hes"
@@ -30,8 +30,8 @@ const (
 	CreatedAt = "_createdAt"
 	// UpdatedAt the updated time for session
 	UpdatedAt = "_updatedAt"
-	// ErrCategorySession session error category
-	ErrCategorySession = "cod-session"
+	// ErrCategory session error category
+	ErrCategory = "cod-session"
 	// Key session key
 	Key = "_session"
 )
@@ -43,6 +43,7 @@ var (
 	ErrDuplicateCommit = createError("duplicate commit")
 	// ErrIDNil session id is nil
 	ErrIDNil = createError("session id is nil")
+	json     = jsoniter.ConfigCompatibleWithStandardLibrary
 )
 
 type (
@@ -137,7 +138,7 @@ func generateID() string {
 func createError(message string) *hes.Error {
 	return &hes.Error{
 		Message:    message,
-		Category:   ErrCategorySession,
+		Category:   ErrCategory,
 		StatusCode: http.StatusInternalServerError,
 		Exception:  true,
 	}
@@ -148,7 +149,7 @@ func wrapError(err error) *hes.Error {
 	if !ok {
 		he = hes.NewWithError(err)
 		he.StatusCode = http.StatusInternalServerError
-		he.Category = ErrCategorySession
+		he.Category = ErrCategory
 	}
 	he.Exception = true
 	return he
@@ -351,7 +352,6 @@ func New(config Config) cod.Handler {
 		s := &Session{
 			Store: store,
 		}
-		// cookie只会因为获取不到而报错，因此忽略
 		id, err := getID(c)
 		if err != nil {
 			err = wrapError(err)
@@ -446,10 +446,12 @@ func NewByHeader(config HeaderConfig) cod.Handler {
 		panic("require header's name")
 	}
 	getID := func(c *cod.Context) (string, error) {
+		// get session id from request header
 		id := c.GetRequestHeader(config.Name)
 		return id, nil
 	}
 	setID := func(c *cod.Context, id string) (err error) {
+		// set session id to response id
 		c.SetHeader(config.Name, id)
 		return
 	}

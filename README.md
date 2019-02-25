@@ -6,7 +6,7 @@ session middleware for cod.
 
 ## NewByCookie
 
-Get session id from cookie(signed).
+Get session id from cookie(signed). The first time commit session, it will add cookie to http response.
 
 ```go
 package main
@@ -58,7 +58,7 @@ func main() {
 
 ## NewByHeader
 
-Get session id from http header.
+Get session id from http request header. The first time commit session, it will add a response's header to http response.
 
 ```go
 package main
@@ -89,6 +89,7 @@ func main() {
 			// suggest to use uuid function
 			return strconv.FormatInt(time.Now().UnixNano(), 34)
 		},
+		// header's name
 		Name: "jt",
 	}))
 
