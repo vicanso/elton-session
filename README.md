@@ -2,7 +2,9 @@
 
 [![Build Status](https://img.shields.io/travis/vicanso/cod-session.svg?label=linux+build)](https://travis-ci.org/vicanso/cod-session)
 
-session middleware for cod.
+Session middleware for cod, it support redis or memory store by default.
+
+Session id store by cookie is more simple. It also support by http header or other ways for session id. 
 
 ## NewByCookie
 
