@@ -104,8 +104,6 @@ type (
 		Store Store
 		// ID the session id
 		ID string
-		// Prefix prefix of session id
-		Prefix string
 		// the data fetch from session
 		data M
 		// the data has been fetched
@@ -322,7 +320,7 @@ func (s *Session) Commit(ttl time.Duration) (err error) {
 		return
 	}
 
-	err = s.Store.Set(s.Prefix+s.ID, buf, ttl)
+	err = s.Store.Set(s.ID, buf, ttl)
 	if err != nil {
 		return
 	}

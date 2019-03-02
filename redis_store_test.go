@@ -15,6 +15,15 @@ func TestRedisStore(t *testing.T) {
 	rs := NewRedisStore(nil, &redis.Options{
 		Addr: "localhost:6379",
 	})
+
+	t.Run("get key", func(t *testing.T) {
+		rs := RedisStore{
+			Prefix: "ss-",
+		}
+		if rs.getKey("a") != "ss-a" {
+			t.Fatalf("get key fail")
+		}
+	})
 	t.Run("new redis store", func(t *testing.T) {
 		client := redis.NewClient(&redis.Options{
 			Addr: "localhost:6379",

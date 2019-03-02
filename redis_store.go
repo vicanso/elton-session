@@ -25,12 +25,17 @@ type (
 	// RedisStore redis store for session
 	RedisStore struct {
 		client *redis.Client
+		Prefix string
 	}
 )
 
+func (rs *RedisStore) getKey(key string) string {
+	return rs.Prefix + key
+}
+
 // Get get the session from redis
 func (rs *RedisStore) Get(key string) ([]byte, error) {
-	buf, err := rs.client.Get(key).Bytes()
+	buf, err := rs.client.Get(rs.getKey(key)).Bytes()
 	if err == redis.Nil {
 		return buf, nil
 	}
@@ -39,12 +44,12 @@ func (rs *RedisStore) Get(key string) ([]byte, error) {
 
 // Set set the session to redis
 func (rs *RedisStore) Set(key string, data []byte, ttl time.Duration) error {
-	return rs.client.Set(key, data, ttl).Err()
+	return rs.client.Set(rs.getKey(key), data, ttl).Err()
 }
 
 // Destroy remove the session from redis
 func (rs *RedisStore) Destroy(key string) error {
-	return rs.client.Del(key).Err()
+	return rs.client.Del(rs.getKey(key)).Err()
 }
 
 // NewRedisStore create new redis store instance
