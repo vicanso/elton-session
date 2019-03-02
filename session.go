@@ -104,6 +104,8 @@ type (
 		Store Store
 		// ID the session id
 		ID string
+		// Prefix prefix of session id
+		Prefix string
 		// the data fetch from session
 		data M
 		// the data has been fetched
@@ -319,7 +321,8 @@ func (s *Session) Commit(ttl time.Duration) (err error) {
 	if err != nil {
 		return
 	}
-	err = s.Store.Set(s.ID, buf, ttl)
+
+	err = s.Store.Set(s.Prefix+s.ID, buf, ttl)
 	if err != nil {
 		return
 	}
@@ -338,7 +341,7 @@ func New(config Config) cod.Handler {
 		getID == nil ||
 		setID == nil ||
 		genID == nil ||
-		expired.Nanoseconds() == 0 {
+		expired == 0 {
 		panic("require store, get function, set function and expired")
 	}
 	skipper := config.Skipper
