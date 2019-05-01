@@ -106,3 +106,43 @@ func main() {
 	d.ListenAndServe(":7001")
 }
 ```
+
+## NewRedisStore
+
+Create a redis store for session.
+
+- `client` redis.Client instance
+- `opts` if client clinet is nil, will use the opts for create a redis client instance
+
+```go
+store := NewRedisStore(nil, &redis.Options{
+	Addr: "localhost:6379",
+})
+```
+
+## NewMemoryStore
+
+Create a memory store for session.
+
+- `size` max size of store
+
+```go
+store, err := NewMemoryStore(1024)
+```
+
+## NewMemoryStoreByConfig
+
+Create a memory store for session.
+
+- `config.Size` max size of store
+- `config.SaveAs` save store sa file
+- `config.Interval` flush to file's interval
+
+
+```go
+store, err := NewMemoryStore(MemoryStoreConfig{
+	Size: 1024,
+	SaveAs: "/tmp/cod-session-store",
+	Interval: 60 * time.Second,
+})
+```

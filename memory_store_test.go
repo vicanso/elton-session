@@ -75,3 +75,32 @@ func TestMemoryStore(t *testing.T) {
 		}
 	})
 }
+
+func TestMemoryStoreFlush(t *testing.T) {
+	ttl := 10 * time.Second
+	key := "a"
+	value := []byte("abcd")
+	config := MemoryStoreConfig{
+		Size:     10,
+		SaveAs:   "/tmp/cod-session-store",
+		Interval: time.Second,
+	}
+	store, err := NewMemoryStoreByConfig(config)
+	if err != nil {
+		t.Fatalf("new memory store fail, %v", err)
+	}
+	store.Set(key, value, ttl)
+	time.Sleep(1100 * time.Millisecond)
+	store.StopFlush()
+	store, err = NewMemoryStoreByConfig(config)
+	if err != nil {
+		t.Fatalf("new memory store fail, %v", err)
+	}
+	data, err := store.Get(key)
+	if err != nil {
+		t.Fatalf("get session fail, %v", err)
+	}
+	if !bytes.Equal(data, value) {
+		t.Fatalf("load store from fail")
+	}
+}
