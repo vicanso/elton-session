@@ -18,8 +18,8 @@ github.com/spf13/cast v1.3.0/go.mod h1:Qx5cxh0v+4UWYiBimWS+eyWzqEqokIECu5etghLkU
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
-github.com/vicanso/cod v0.0.7 h1:CHyIL7zkNOhEv0JosDDyRHCUALovry1P+dLISaANj1w=
-github.com/vicanso/cod v0.0.7/go.mod h1:tHGTs/JDTcp/OE4VaCutVMpYL69aR1rKUggsHviTuFc=
+github.com/vicanso/cod v0.1.1 h1:l4dbZSGhGRVnrxLbArC/60GXNxDo0O/RlY5z4iHSa7I=
+github.com/vicanso/cod v0.1.1/go.mod h1:T5GOazXuYrwwE1qMA0G3zka7NVwwkoL2fYIWNfeEpJw=
 github.com/vicanso/hes v0.1.4 h1:n8kG8krvNJF4Sj1PvZOEUzdUsmDSbCcGr8C1nYnoP+o=
 github.com/vicanso/hes v0.1.4/go.mod h1:bG0UJ3EihDKObFcLLwJYjxHHr9saFllsFcepyDIvFlo=
 github.com/vicanso/keygrip v0.1.0 h1:/zYzoVIbREAvaxSM7bo3/oSXuuYztaP71dPBfhRoNkM=

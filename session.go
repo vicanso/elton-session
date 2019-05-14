@@ -347,7 +347,7 @@ func New(config Config) cod.Handler {
 		skipper = cod.DefaultSkipper
 	}
 	return func(c *cod.Context) (err error) {
-		if skipper(c) {
+		if skipper(c) || c.Get(Key) != nil {
 			return c.Next()
 		}
 		s := &Session{
