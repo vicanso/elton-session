@@ -1,9 +1,10 @@
 package session
 
 import (
-	"bytes"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMemoryStore(t *testing.T) {
@@ -13,70 +14,65 @@ func TestMemoryStore(t *testing.T) {
 	ms, _ := NewMemoryStore(1024)
 
 	t.Run("not init", func(t *testing.T) {
+		assert := assert.New(t)
 		tmp := &MemoryStore{}
 		_, err := tmp.Get(key)
-		if err != ErrNotInit {
-			t.Fatalf("should return not init error")
-		}
+		assert.Equal(err, ErrNotInit)
+
 		err = tmp.Set(key, data, ttl)
-		if err != ErrNotInit {
-			t.Fatalf("should return not init error")
-		}
+		assert.Equal(err, ErrNotInit)
+
 		err = tmp.Destroy(key)
-		if err != ErrNotInit {
-			t.Fatalf("should return not init error")
-		}
+		assert.Equal(err, ErrNotInit)
 	})
 
 	t.Run("get not exists data", func(t *testing.T) {
+		assert := assert.New(t)
 		buf, err := ms.Get(key)
-		if err != nil || len(buf) != 0 {
-			t.Fatalf("should return empty bytes")
-		}
+
+		assert.Nil(err)
+		assert.Empty(buf, "should return empty bytes")
 	})
 
 	t.Run("set data", func(t *testing.T) {
+		assert := assert.New(t)
 		err := ms.Set(key, data, ttl)
-		if err != nil {
-			t.Fatalf("set data fail, %v", err)
-		}
+		assert.Nil(err)
 		buf, err := ms.Get(key)
-		if err != nil {
-			t.Fatalf("get data fail after set, %v", err)
-		}
-		if !bytes.Equal(data, buf) {
-			t.Fatalf("the data is not the same after set")
-		}
+		assert.Nil(err)
+		assert.Equal(data, buf, "the data isn't the same after set")
 	})
 
 	t.Run("destroy", func(t *testing.T) {
+		assert := assert.New(t)
 		err := ms.Destroy(key)
-		if err != nil {
-			t.Fatalf("destory data fail, %v", err)
-		}
+		assert.Nil(err)
 		buf, err := ms.Get(key)
-		if err != nil || len(buf) != 0 {
-			t.Fatalf("should return empty bytes after destroy")
-		}
+		assert.Nil(err)
+		assert.Empty(buf, "should return empty bytes after destroy")
 	})
 
 	t.Run("expired", func(t *testing.T) {
+		assert := assert.New(t)
 		err := ms.Set(key, data, 0)
-		if err != nil {
-			t.Fatalf("set data fail, %v", err)
-		}
+		assert.Nil(err)
 		time.Sleep(time.Second)
 		buf, err := ms.Get(key)
-		if err != nil {
-			t.Fatalf("get data fail after set, %v", err)
-		}
-		if len(buf) != 0 {
-			t.Fatalf("expired data should be nil")
-		}
+		assert.Nil(err)
+		assert.Empty(buf, "expired data should be nil")
+	})
+
+	t.Run("get data", func(t *testing.T) {
+		assert := assert.New(t)
+		ms.client.Add(key, data)
+		buf, err := ms.Get(key)
+		assert.Nil(err)
+		assert.Empty(buf, "get invalid data should be empty")
 	})
 }
 
 func TestMemoryStoreFlush(t *testing.T) {
+	assert := assert.New(t)
 	ttl := 10 * time.Second
 	key := "a"
 	value := []byte("abcd")
@@ -86,21 +82,13 @@ func TestMemoryStoreFlush(t *testing.T) {
 		Interval: time.Second,
 	}
 	store, err := NewMemoryStoreByConfig(config)
-	if err != nil {
-		t.Fatalf("new memory store fail, %v", err)
-	}
+	assert.Nil(err, "new memory store fail")
 	store.Set(key, value, ttl)
 	time.Sleep(1100 * time.Millisecond)
 	store.StopFlush()
 	store, err = NewMemoryStoreByConfig(config)
-	if err != nil {
-		t.Fatalf("new memory store fail, %v", err)
-	}
+	assert.Nil(err, "new memory store fail")
 	data, err := store.Get(key)
-	if err != nil {
-		t.Fatalf("get session fail, %v", err)
-	}
-	if !bytes.Equal(data, value) {
-		t.Fatalf("load store from fail")
-	}
+	assert.Nil(err)
+	assert.Equal(data, value, "load store from memory fail")
 }

@@ -29,6 +29,10 @@ type (
 	}
 )
 
+var (
+	errClientAndOptBothNil = errors.New("client and opts can both be nil")
+)
+
 func (rs *RedisStore) getKey(key string) string {
 	return rs.Prefix + key
 }
@@ -55,7 +59,7 @@ func (rs *RedisStore) Destroy(key string) error {
 // NewRedisStore create new redis store instance
 func NewRedisStore(client *redis.Client, opts *redis.Options) *RedisStore {
 	if client == nil && opts == nil {
-		panic(errors.New("client and opts can both be nil"))
+		panic(errClientAndOptBothNil)
 	}
 	rs := &RedisStore{}
 	if client != nil {

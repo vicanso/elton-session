@@ -1,11 +1,11 @@
 package session
 
 import (
-	"bytes"
 	"testing"
 	"time"
 
 	"github.com/go-redis/redis"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRedisStore(t *testing.T) {
@@ -16,13 +16,24 @@ func TestRedisStore(t *testing.T) {
 		Addr: "localhost:6379",
 	})
 
+	t.Run("client and opts both nil", func(t *testing.T) {
+		assert := assert.New(t)
+		done := false
+		defer func() {
+			r := recover()
+			assert.Equal(r.(error), errClientAndOptBothNil)
+			done = true
+		}()
+		NewRedisStore(nil, nil)
+		assert.True(done)
+	})
+
 	t.Run("get key", func(t *testing.T) {
+		assert := assert.New(t)
 		rs := RedisStore{
 			Prefix: "ss-",
 		}
-		if rs.getKey("a") != "ss-a" {
-			t.Fatalf("get key fail")
-		}
+		assert.Equal(rs.getKey("a"), "ss-a")
 	})
 	t.Run("new redis store", func(t *testing.T) {
 		client := redis.NewClient(&redis.Options{
@@ -35,34 +46,27 @@ func TestRedisStore(t *testing.T) {
 		})
 	})
 	t.Run("get not exists data", func(t *testing.T) {
+		assert := assert.New(t)
 		buf, err := rs.Get(key)
-		if err != nil || len(buf) != 0 {
-			t.Fatalf("should return empty bytes")
-		}
+		assert.Nil(err)
+		assert.Empty(buf, "should return empty bytes")
 	})
 
 	t.Run("set data", func(t *testing.T) {
+		assert := assert.New(t)
 		err := rs.Set(key, data, ttl)
-		if err != nil {
-			t.Fatalf("set data fail, %v", err)
-		}
+		assert.Nil(err)
 		buf, err := rs.Get(key)
-		if err != nil {
-			t.Fatalf("get data fail after set, %v", err)
-		}
-		if !bytes.Equal(data, buf) {
-			t.Fatalf("the data is not the same after set")
-		}
+		assert.Nil(err)
+		assert.Equal(data, buf, "the data isn't the same after set")
 	})
 
 	t.Run("destroy", func(t *testing.T) {
+		assert := assert.New(t)
 		err := rs.Destroy(key)
-		if err != nil {
-			t.Fatalf("destory data fail, %v", err)
-		}
+		assert.Nil(err)
 		buf, err := rs.Get(key)
-		if err != nil || len(buf) != 0 {
-			t.Fatalf("should return empty bytes after destroy")
-		}
+		assert.Nil(err)
+		assert.Empty(buf, "should return empty bytes after destroy")
 	})
 }
