@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/vicanso/cod"
+	"github.com/vicanso/elton"
 	"github.com/vicanso/hes"
 )
 
@@ -180,18 +180,11 @@ func TestNotFetchError(t *testing.T) {
 func TestSessionMiddleware(t *testing.T) {
 	uid := "abcd"
 	idName := "jt"
-	d := &cod.Cod{
-		Keys: []string{
-			"secret",
-			"cuttlefisk",
-		},
-	}
 	store, err := NewMemoryStore(10)
 	assert.Nil(t, err, "new memory store fail")
 
 	cookieSessionMiddleware := NewByCookie(CookieConfig{
 		Store:   store,
-		Signed:  true,
 		Expired: 10 * time.Millisecond,
 		GenID: func() string {
 			return uid
@@ -208,9 +201,8 @@ func TestSessionMiddleware(t *testing.T) {
 		assert := assert.New(t)
 		req := httptest.NewRequest("GET", "/users/me", nil)
 		resp := httptest.NewRecorder()
-		c := cod.NewContext(resp, req)
-		// 必须 cod 实例有配置密钥才会生成 signed cookie
-		c.Cod(d)
+		c := elton.NewContext(resp, req)
+
 		c.Next = func() error {
 			se := c.Get(Key).(*Session)
 			se.Set("foo", "bar")
@@ -220,21 +212,15 @@ func TestSessionMiddleware(t *testing.T) {
 		assert.Nil(err, "session by cookie middleware fail")
 		assert.Equal(c.Headers["Set-Cookie"], []string{
 			"jt=abcd; Path=/; Domain=abc.com; Max-Age=60; HttpOnly; Secure",
-			"jt.sig=sE80Oh3EoVzvllgRnFRBHy5As0U; Path=/; Domain=abc.com; Max-Age=60; HttpOnly; Secure",
-		}, "set signed cookie fail")
+		}, "set cookie fail")
 
 		req = httptest.NewRequest("GET", "/users/me", nil)
 		req.AddCookie(&http.Cookie{
 			Name:  idName,
 			Value: uid,
 		})
-		req.AddCookie(&http.Cookie{
-			Name:  "jt.sig",
-			Value: "sE80Oh3EoVzvllgRnFRBHy5As0U",
-		})
 		resp = httptest.NewRecorder()
-		c = cod.NewContext(resp, req)
-		c.Cod(d)
+		c = elton.NewContext(resp, req)
 		c.Next = func() error {
 			se := c.Get(Key).(*Session)
 			if se.GetString("foo") != "bar" {
@@ -260,7 +246,7 @@ func TestSessionMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest("GET", "/users/me", nil)
 		resp := httptest.NewRecorder()
-		c := cod.NewContext(resp, req)
+		c := elton.NewContext(resp, req)
 		c.Next = func() error {
 			se := c.Get(Key).(*Session)
 			se.Set("foo", "bar")
@@ -274,7 +260,7 @@ func TestSessionMiddleware(t *testing.T) {
 		req.Header.Set(idName, uid)
 
 		resp = httptest.NewRecorder()
-		c = cod.NewContext(resp, req)
+		c = elton.NewContext(resp, req)
 		c.Next = func() error {
 			se := c.Get(Key).(*Session)
 			if se.GetString("foo") != "bar" {

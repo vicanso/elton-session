@@ -21,7 +21,7 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/cast"
-	"github.com/vicanso/cod"
+	"github.com/vicanso/elton"
 	"github.com/vicanso/hes"
 )
 
@@ -31,7 +31,7 @@ const (
 	// UpdatedAt the updated time for session
 	UpdatedAt = "_updatedAt"
 	// ErrCategory session error category
-	ErrCategory = "cod-session"
+	ErrCategory = "elton-session"
 	// Key session key
 	Key = "_session"
 )
@@ -54,21 +54,21 @@ type (
 		// Store session store
 		Store Store
 		// Skipper skipper
-		Skipper cod.Skipper
+		Skipper elton.Skipper
 		// Expired session store's max age
 		Expired time.Duration
 		// GenID generate uid
 		GenID func() string
 
-		Get func(c *cod.Context) (string, error)
-		Set func(c *cod.Context, id string) error
+		Get func(c *elton.Context) (string, error)
+		Set func(c *elton.Context, id string) error
 	}
 	// CookieConfig session cookie config
 	CookieConfig struct {
 		// Store session store
 		Store Store
 		// Skipper skipper
-		Skipper cod.Skipper
+		Skipper elton.Skipper
 		// Expired session store's max age
 		Expired time.Duration
 		// GenID generate uid
@@ -89,7 +89,7 @@ type (
 		// Store session store
 		Store Store
 		// Skipper skipper
-		Skipper cod.Skipper
+		Skipper elton.Skipper
 		// Expired session store's max age
 		Expired time.Duration
 		// GenID generate uid
@@ -329,7 +329,7 @@ func (s *Session) Commit(ttl time.Duration) (err error) {
 }
 
 // New create a new session middleware
-func New(config Config) cod.Handler {
+func New(config Config) elton.Handler {
 	store := config.Store
 	getID := config.Get
 	setID := config.Set
@@ -344,9 +344,9 @@ func New(config Config) cod.Handler {
 	}
 	skipper := config.Skipper
 	if skipper == nil {
-		skipper = cod.DefaultSkipper
+		skipper = elton.DefaultSkipper
 	}
-	return func(c *cod.Context) (err error) {
+	return func(c *elton.Context) (err error) {
 		if skipper(c) || c.Get(Key) != nil {
 			return c.Next()
 		}
@@ -397,11 +397,11 @@ func New(config Config) cod.Handler {
 }
 
 // NewByCookie create a session by cookie, which get session id from cookie
-func NewByCookie(config CookieConfig) cod.Handler {
+func NewByCookie(config CookieConfig) elton.Handler {
 	if config.Name == "" {
 		panic("require cookie's name")
 	}
-	getID := func(c *cod.Context) (string, error) {
+	getID := func(c *elton.Context) (string, error) {
 		getCookie := c.Cookie
 		if config.Signed {
 			getCookie = c.SignedCookie
@@ -413,7 +413,7 @@ func NewByCookie(config CookieConfig) cod.Handler {
 		}
 		return cookie.Value, nil
 	}
-	setID := func(c *cod.Context, id string) (err error) {
+	setID := func(c *elton.Context, id string) (err error) {
 		setCookie := c.AddCookie
 		if config.Signed {
 			setCookie = c.AddSignedCookie
@@ -442,16 +442,16 @@ func NewByCookie(config CookieConfig) cod.Handler {
 }
 
 // NewByHeader create a session by header, which get session id from request header
-func NewByHeader(config HeaderConfig) cod.Handler {
+func NewByHeader(config HeaderConfig) elton.Handler {
 	if config.Name == "" {
 		panic("require header's name")
 	}
-	getID := func(c *cod.Context) (string, error) {
+	getID := func(c *elton.Context) (string, error) {
 		// get session id from request header
 		id := c.GetRequestHeader(config.Name)
 		return id, nil
 	}
-	setID := func(c *cod.Context, id string) (err error) {
+	setID := func(c *elton.Context, id string) (err error) {
 		// set session id to response id
 		c.SetHeader(config.Name, id)
 		return

@@ -1,8 +1,8 @@
-# cod-session
+# elton-session
 
-[![Build Status](https://img.shields.io/travis/vicanso/cod-session.svg?label=linux+build)](https://travis-ci.org/vicanso/cod-session)
+[![Build Status](https://img.shields.io/travis/vicanso/elton-session.svg?label=linux+build)](https://travis-ci.org/vicanso/elton-session)
 
-Session middleware for cod, it support redis or memory store by default.
+Session middleware for elton, it support redis or memory store by default.
 
 Session id store by cookie is more simple. It also support by http header or other ways for session id. 
 
@@ -18,8 +18,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/vicanso/cod"
-	session "github.com/vicanso/cod-session"
+	"github.com/vicanso/elton"
+	session "github.com/vicanso/elton-session"
 )
 
 func main() {
@@ -27,7 +27,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	d := cod.New()
+	d := elton.New()
 	d.Keys = []string{
 		"cuttlefish",
 	}
@@ -46,7 +46,7 @@ func main() {
 		HttpOnly: true,
 	}))
 
-	d.GET("/", func(c *cod.Context) (err error) {
+	d.GET("/", func(c *elton.Context) (err error) {
 		se := c.Get(session.Key).(*session.Session)
 		views := se.GetInt("views")
 		se.Set("views", views+1)
@@ -70,8 +70,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/vicanso/cod"
-	session "github.com/vicanso/cod-session"
+	"github.com/vicanso/elton"
+	session "github.com/vicanso/elton-session"
 )
 
 func main() {
@@ -79,7 +79,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	d := cod.New()
+	d := elton.New()
 	d.Keys = []string{
 		"cuttlefish",
 	}
@@ -95,7 +95,7 @@ func main() {
 		Name: "jt",
 	}))
 
-	d.GET("/", func(c *cod.Context) (err error) {
+	d.GET("/", func(c *elton.Context) (err error) {
 		se := c.Get(session.Key).(*session.Session)
 		views := se.GetInt("views")
 		se.Set("views", views+1)
@@ -142,7 +142,7 @@ Create a memory store for session.
 ```go
 store, err := NewMemoryStore(MemoryStoreConfig{
 	Size: 1024,
-	SaveAs: "/tmp/cod-session-store",
+	SaveAs: "/tmp/elton-session-store",
 	Interval: 60 * time.Second,
 })
 ```

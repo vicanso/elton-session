@@ -78,7 +78,7 @@ func TestMemoryStoreFlush(t *testing.T) {
 	value := []byte("abcd")
 	config := MemoryStoreConfig{
 		Size:     10,
-		SaveAs:   "/tmp/cod-session-store",
+		SaveAs:   "/tmp/elton-session-store",
 		Interval: time.Second,
 	}
 	store, err := NewMemoryStoreByConfig(config)
