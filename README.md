@@ -28,9 +28,11 @@ func main() {
 		panic(err)
 	}
 	d := elton.New()
-	d.Keys = []string{
+	signedKeys := &elton.RWMutexSignedKeys{}
+	signedKeys.SetKeys([]string{
 		"cuttlefish",
-	}
+	})
+	d.SignedKeys = signedKeys
 
 	d.Use(session.NewByCookie(session.CookieConfig{
 		Store:   store,
@@ -56,6 +58,7 @@ func main() {
 
 	d.ListenAndServe(":7001")
 }
+
 ```
 
 ## NewByHeader
@@ -80,9 +83,11 @@ func main() {
 		panic(err)
 	}
 	d := elton.New()
-	d.Keys = []string{
+	signedKeys := &elton.RWMutexSignedKeys{}
+	signedKeys.SetKeys([]string{
 		"cuttlefish",
-	}
+	})
+	d.SignedKeys = signedKeys
 
 	d.Use(session.NewByHeader(session.HeaderConfig{
 		Store:   store,
