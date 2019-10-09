@@ -151,3 +151,44 @@ store, err := NewMemoryStore(MemoryStoreConfig{
 	Interval: 60 * time.Second,
 })
 ```
+
+# Other store
+
+You can use other store for session, like redis and mongodb.
+
+
+
+```go
+type (
+	// RedisStore redis store for session
+	RedisStore struct {
+		client *redis.Client
+	}
+)
+
+// Get get the session from redis
+func (rs *RedisStore) Get(key string) ([]byte, error) {
+	buf, err := rs.client.Get(key).Bytes()
+	if err == redis.Nil {
+		return buf, nil
+	}
+	return buf, err
+}
+
+// Set set the session to redis
+func (rs *RedisStore) Set(key string, data []byte, ttl time.Duration) error {
+	return rs.client.Set(key, data, ttl).Err()
+}
+
+// Destroy remove the session from redis
+func (rs *RedisStore) Destroy(key string) error {
+	return rs.client.Del(key).Err()
+}
+
+// NewRedisStore create new redis store instance
+func NewRedisStore(client *redis.Client) *RedisStore {
+	rs := &RedisStore{}
+	rs.client = client
+	return rs
+}
+```
