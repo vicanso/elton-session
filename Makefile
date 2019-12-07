@@ -11,3 +11,6 @@ test-cover:
 
 release:
 	go mod tidy
+
+lint:
+	golangci-lint run

@@ -15,11 +15,11 @@
 package session
 
 import (
+	"encoding/json"
 	"math/rand"
 	"net/http"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/cast"
 	"github.com/vicanso/elton"
 	"github.com/vicanso/hes"
@@ -43,7 +43,6 @@ var (
 	ErrDuplicateCommit = createError("duplicate commit")
 	// ErrIDNil session id is nil
 	ErrIDNil = createError("session id is nil")
-	json     = jsoniter.ConfigCompatibleWithStandardLibrary
 )
 
 type (

@@ -15,6 +15,7 @@
 package session
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"sync/atomic"
@@ -144,6 +145,7 @@ func (ms *MemoryStore) intervalFlush(saveAs string, interval time.Duration) {
 			}
 			m[key] = info
 		}
+
 		buf, _ := json.Marshal(&m)
 		ioutil.WriteFile(saveAs, buf, 0600)
 	}
