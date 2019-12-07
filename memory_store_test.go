@@ -83,7 +83,7 @@ func TestMemoryStoreFlush(t *testing.T) {
 	}
 	store, err := NewMemoryStoreByConfig(config)
 	assert.Nil(err, "new memory store fail")
-	store.Set(key, value, ttl)
+	_ = store.Set(key, value, ttl)
 	time.Sleep(1100 * time.Millisecond)
 	store.StopFlush()
 	store, err = NewMemoryStoreByConfig(config)

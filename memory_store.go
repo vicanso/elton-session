@@ -116,11 +116,11 @@ func (ms *MemoryStore) intervalFlush(saveAs string, interval time.Duration) {
 	if client == nil {
 		return
 	}
+	atomic.StoreInt32(&ms.flushStatus, flushStatusRunning)
 	if interval < time.Second {
 		interval = defaultInterval
 	}
-	atomic.StoreInt32(&ms.flushStatus, flushStatusRunning)
-	ticker := time.NewTicker(time.Second * 1)
+	ticker := time.NewTicker(interval)
 	for range ticker.C {
 		if atomic.LoadInt32(&ms.flushStatus) == flushStatusStop {
 			return
@@ -147,7 +147,7 @@ func (ms *MemoryStore) intervalFlush(saveAs string, interval time.Duration) {
 		}
 
 		buf, _ := json.Marshal(&m)
-		ioutil.WriteFile(saveAs, buf, 0600)
+		_ = ioutil.WriteFile(saveAs, buf, 0600)
 	}
 }
 
@@ -179,7 +179,10 @@ func NewMemoryStoreByConfig(config MemoryStoreConfig) (store *MemoryStore, err e
 		// 从文件中恢复
 		buf, _ := ioutil.ReadFile(file)
 		m := make(map[string]*MemoryStoreInfo)
-		json.Unmarshal(buf, &m)
+		err = json.Unmarshal(buf, &m)
+		if err != nil {
+			return
+		}
 		for key, value := range m {
 			store.client.Add(key, value)
 		}

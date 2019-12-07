@@ -65,7 +65,7 @@ func TestGetSetData(t *testing.T) {
 	assert.Nil(err, "set empty map shouldn't be fail")
 	_, err = s.Fetch()
 	assert.Nil(err, "fetch fail")
-	s.SetMap(map[string]interface{}{
+	_ = s.SetMap(map[string]interface{}{
 		"a": 1,
 		"b": "2",
 	})
@@ -91,8 +91,9 @@ func TestCommit(t *testing.T) {
 	err = s.Commit(ttl)
 	assert.Nil(err, "commit not modified fail")
 
-	s.Fetch()
-	s.Set("a", 1)
+	_, err = s.Fetch()
+	assert.Nil(err)
+	_ = s.Set("a", 1)
 	err = s.Commit(ttl)
 	assert.Equal(err, ErrIDNil, "nil id commit should return error")
 
@@ -116,8 +117,8 @@ func TestSession(t *testing.T) {
 
 	_, err = s.Fetch()
 	assert.Nil(err, "fetch session twice fail")
-	s.Set("a", "1")
-	s.SetMap(map[string]interface{}{
+	_ = s.Set("a", "1")
+	_ = s.SetMap(map[string]interface{}{
 		"b": 2,
 		"c": true,
 		"d": 1.1,
@@ -143,7 +144,8 @@ func TestSession(t *testing.T) {
 
 	updatedAt := s.GetUpdatedAt()
 	time.Sleep(1 * time.Second)
-	s.Refresh()
+	err = s.Refresh()
+	assert.Nil(err)
 	assert.NotEqual(s.GetUpdatedAt(), updatedAt, "refresh fail")
 
 	err = s.Destroy()
@@ -205,8 +207,7 @@ func TestSessionMiddleware(t *testing.T) {
 
 		c.Next = func() error {
 			se := c.Get(Key).(*Session)
-			se.Set("foo", "bar")
-			return nil
+			return se.Set("foo", "bar")
 		}
 		err = cookieSessionMiddleware(c)
 		assert.Nil(err, "session by cookie middleware fail")
@@ -249,8 +250,7 @@ func TestSessionMiddleware(t *testing.T) {
 		c := elton.NewContext(resp, req)
 		c.Next = func() error {
 			se := c.Get(Key).(*Session)
-			se.Set("foo", "bar")
-			return nil
+			return se.Set("foo", "bar")
 		}
 		err = headerSessionMiddleware(c)
 		assert.Nil(err, "session by header middleware fail")
