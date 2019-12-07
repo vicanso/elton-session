@@ -179,10 +179,8 @@ func NewMemoryStoreByConfig(config MemoryStoreConfig) (store *MemoryStore, err e
 		// 从文件中恢复
 		buf, _ := ioutil.ReadFile(file)
 		m := make(map[string]*MemoryStoreInfo)
-		err = json.Unmarshal(buf, &m)
-		if err != nil {
-			return
-		}
+		// 如果读取失败，则忽略
+		_ = json.Unmarshal(buf, &m)
 		for key, value := range m {
 			store.client.Add(key, value)
 		}
