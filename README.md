@@ -112,18 +112,6 @@ func main() {
 }
 ```
 
-## NewRedisStore
-
-Create a redis store for session.
-
-- `client` redis.Client instance
-- `opts` if client clinet is nil, will use the opts for create a redis client instance
-
-```go
-store := NewRedisStore(nil, &redis.Options{
-	Addr: "localhost:6379",
-})
-```
 
 ## NewMemoryStore
 
