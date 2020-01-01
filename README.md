@@ -82,33 +82,39 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	d := elton.New()
+	e := elton.New()
 	signedKeys := &elton.RWMutexSignedKeys{}
 	signedKeys.SetKeys([]string{
 		"cuttlefish",
 	})
-	d.SignedKeys = signedKeys
+	e.SignedKeys = signedKeys
 
-	d.Use(session.NewByHeader(session.HeaderConfig{
+	e.Use(session.NewByCookie(session.CookieConfig{
 		Store:   store,
+		Signed:  true,
 		Expired: 10 * time.Hour,
 		GenID: func() string {
 			// suggest to use uuid function
 			return strconv.FormatInt(time.Now().UnixNano(), 34)
 		},
-		// header's name
-		Name: "jt",
+		Name:     "jt",
+		Path:     "/",
+		MaxAge:   24 * 3600,
+		HttpOnly: true,
 	}))
 
-	d.GET("/", func(c *elton.Context) (err error) {
+	e.GET("/", func(c *elton.Context) (err error) {
 		se := c.Get(session.Key).(*session.Session)
 		views := se.GetInt("views")
-		se.Set("views", views+1)
+		_ = se.Set("views", views+1)
 		c.BodyBuffer = bytes.NewBufferString("hello world " + strconv.Itoa(views))
 		return
 	})
 
-	d.ListenAndServe(":3000")
+	err = e.ListenAndServe(":3000")
+	if err != nil {
+		panic(err)
+	}
 }
 ```
 

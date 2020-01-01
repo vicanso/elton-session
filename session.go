@@ -50,6 +50,8 @@ type (
 	M map[string]interface{}
 	// Config session middleware config
 	Config struct {
+		// LazyFetch if set true, the fetch function isn't called when initialization
+		LazyFetch bool
 		// Store session store
 		Store Store
 		// Skipper skipper
@@ -361,10 +363,12 @@ func New(config Config) elton.Handler {
 			s.ID = id
 		}
 		// 拉取session（默认都拉取，未做动态拉取）
-		_, err = s.Fetch()
-		if err != nil {
-			err = wrapError(err)
-			return
+		if !config.LazyFetch {
+			_, err = s.Fetch()
+			if err != nil {
+				err = wrapError(err)
+				return
+			}
 		}
 
 		// session 保存至context中

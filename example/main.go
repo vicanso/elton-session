@@ -14,14 +14,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	d := elton.New()
+	e := elton.New()
 	signedKeys := &elton.RWMutexSignedKeys{}
 	signedKeys.SetKeys([]string{
 		"cuttlefish",
 	})
-	d.SignedKeys = signedKeys
+	e.SignedKeys = signedKeys
 
-	d.Use(session.NewByCookie(session.CookieConfig{
+	e.Use(session.NewByCookie(session.CookieConfig{
 		Store:   store,
 		Signed:  true,
 		Expired: 10 * time.Hour,
@@ -35,7 +35,7 @@ func main() {
 		HttpOnly: true,
 	}))
 
-	d.GET("/", func(c *elton.Context) (err error) {
+	e.GET("/", func(c *elton.Context) (err error) {
 		se := c.Get(session.Key).(*session.Session)
 		views := se.GetInt("views")
 		_ = se.Set("views", views+1)
@@ -43,7 +43,7 @@ func main() {
 		return
 	})
 
-	err = d.ListenAndServe(":3000")
+	err = e.ListenAndServe(":3000")
 	if err != nil {
 		panic(err)
 	}
