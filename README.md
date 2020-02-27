@@ -49,7 +49,8 @@ func main() {
 	}))
 
 	d.GET("/", func(c *elton.Context) (err error) {
-		se := c.Get(session.Key).(*session.Session)
+		value, _ := c.Get(session.Key)
+		se := value.(*session.Session)
 		views := se.GetInt("views")
 		se.Set("views", views+1)
 		c.BodyBuffer = bytes.NewBufferString("hello world " + strconv.Itoa(views))

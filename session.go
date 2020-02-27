@@ -348,7 +348,11 @@ func New(config Config) elton.Handler {
 		skipper = elton.DefaultSkipper
 	}
 	return func(c *elton.Context) (err error) {
-		if skipper(c) || c.Get(Key) != nil {
+		if skipper(c) {
+			return c.Next()
+		}
+		_, exists := c.Get(Key)
+		if exists {
 			return c.Next()
 		}
 		s := &Session{

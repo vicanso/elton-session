@@ -206,7 +206,8 @@ func TestSessionMiddleware(t *testing.T) {
 		c := elton.NewContext(resp, req)
 
 		c.Next = func() error {
-			se := c.Get(Key).(*Session)
+			value, _ := c.Get(Key)
+			se := value.(*Session)
 			return se.Set("foo", "bar")
 		}
 		err = cookieSessionMiddleware(c)
@@ -223,7 +224,8 @@ func TestSessionMiddleware(t *testing.T) {
 		resp = httptest.NewRecorder()
 		c = elton.NewContext(resp, req)
 		c.Next = func() error {
-			se := c.Get(Key).(*Session)
+			value, _ := c.Get(Key)
+			se := value.(*Session)
 			if se.GetString("foo") != "bar" {
 				return errors.New("get session fail")
 			}
@@ -249,7 +251,8 @@ func TestSessionMiddleware(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c := elton.NewContext(resp, req)
 		c.Next = func() error {
-			se := c.Get(Key).(*Session)
+			value, _ := c.Get(Key)
+			se := value.(*Session)
 			return se.Set("foo", "bar")
 		}
 		err = headerSessionMiddleware(c)
@@ -262,7 +265,8 @@ func TestSessionMiddleware(t *testing.T) {
 		resp = httptest.NewRecorder()
 		c = elton.NewContext(resp, req)
 		c.Next = func() error {
-			se := c.Get(Key).(*Session)
+			value, _ := c.Get(Key)
+			se := value.(*Session)
 			if se.GetString("foo") != "bar" {
 				return errors.New("get session fail")
 			}
