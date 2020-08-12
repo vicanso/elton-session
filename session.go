@@ -435,7 +435,7 @@ func NewByCookie(config CookieConfig) elton.Handler {
 		}
 
 		// 设置cookie
-		err = setCookie(&http.Cookie{
+		setCookie(&http.Cookie{
 			Name:     config.Name,
 			Value:    id,
 			Path:     config.Path,
