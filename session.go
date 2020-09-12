@@ -45,8 +45,6 @@ const (
 )
 
 var (
-	// ErrNotFetched not fetch error
-	ErrNotFetched = createError("not fetch session")
 	// ErrDuplicateCommit duplicate commit
 	ErrDuplicateCommit = createError("duplicate commit")
 	// ErrIDNil session id is nil
@@ -170,10 +168,8 @@ func getInitMap() M {
 	return m
 }
 
-// Fetch fetch the session data from store
-func (s *Session) Fetch() (m M, err error) {
+func (s *Session) fetch() (err error) {
 	if s.fetched {
-		m = s.data
 		return
 	}
 	store := s.Store
@@ -184,7 +180,7 @@ func (s *Session) Fetch() (m M, err error) {
 			return
 		}
 	}
-	m = make(M)
+	m := make(M)
 	if len(buf) == 0 {
 		m = getInitMap()
 	} else {
@@ -198,6 +194,20 @@ func (s *Session) Fetch() (m M, err error) {
 	return
 }
 
+// Fetch fetch the session data from store
+func (s *Session) Fetch() (m M, err error) {
+	if s.fetched {
+		m = s.data
+		return
+	}
+	err = s.fetch()
+	if err != nil {
+		return
+	}
+	m = s.data
+	return
+}
+
 // Destroy remove the data from store and reset session data
 func (s *Session) Destroy() (err error) {
 	if s.ID == "" {
@@ -207,6 +217,10 @@ func (s *Session) Destroy() (err error) {
 	m := getInitMap()
 	s.data = m
 	err = store.Destroy(s.ID)
+	if err != nil {
+		return
+	}
+	s.ID = ""
 	return
 }
 
@@ -221,7 +235,10 @@ func (s *Session) Set(key string, value interface{}) (err error) {
 		return
 	}
 	if !s.fetched {
-		return ErrNotFetched
+		err = s.fetch()
+		if err != nil {
+			return
+		}
 	}
 	if value == nil {
 		delete(s.data, key)
@@ -238,7 +255,10 @@ func (s *Session) SetMap(value map[string]interface{}) (err error) {
 		return
 	}
 	if !s.fetched {
-		return ErrNotFetched
+		err = s.fetch()
+		if err != nil {
+			return
+		}
 	}
 	for k, v := range value {
 		if v == nil {
@@ -255,7 +275,10 @@ func (s *Session) SetMap(value map[string]interface{}) (err error) {
 // Refresh refresh session (update updatedAt)
 func (s *Session) Refresh() (err error) {
 	if !s.fetched {
-		return ErrNotFetched
+		err = s.fetch()
+		if err != nil {
+			return
+		}
 	}
 	s.updatedAt()
 	return
@@ -376,7 +399,7 @@ func New(config Config) elton.Handler {
 		}
 		// 拉取session（默认都拉取，未做动态拉取）
 		if !config.LazyFetch {
-			_, err = s.Fetch()
+			err = s.fetch()
 			if err != nil {
 				err = wrapError(err)
 				return
