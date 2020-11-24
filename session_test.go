@@ -100,6 +100,16 @@ func TestGetSetData(t *testing.T) {
 	})
 	assert.Nil(err, "remove key fail")
 	assert.Empty(s.Get("b"), "remove key fail")
+
+	assert.False(s.Readonly())
+	s.EnableReadonly()
+	assert.True(s.Readonly())
+	err = s.Set("a", 1)
+	assert.Equal(ErrIsReadonly, err)
+	err = s.SetMap(map[string]interface{}{
+		"a": 1,
+	})
+	assert.Equal(ErrIsReadonly, err)
 }
 
 func TestCommit(t *testing.T) {

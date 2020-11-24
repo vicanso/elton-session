@@ -49,6 +49,8 @@ var (
 	ErrDuplicateCommit = createError("duplicate commit")
 	// ErrIDNil session id is nil
 	ErrIDNil = createError("session id is nil")
+	// ErrIsReadonly session is readonly
+	ErrIsReadonly = createError("session is readonly")
 )
 
 type (
@@ -119,6 +121,8 @@ type (
 		modified bool
 		// the session has been committed
 		committed bool
+		// the session is readonly
+		readonly bool
 	}
 	// Store session store
 	Store interface {
@@ -231,6 +235,9 @@ func (s *Session) updatedAt() {
 
 // Set set data to session
 func (s *Session) Set(key string, value interface{}) (err error) {
+	if s.readonly {
+		return ErrIsReadonly
+	}
 	if key == "" {
 		return
 	}
@@ -251,6 +258,9 @@ func (s *Session) Set(key string, value interface{}) (err error) {
 
 // SetMap set map data to session
 func (s *Session) SetMap(value map[string]interface{}) (err error) {
+	if s.readonly {
+		return ErrIsReadonly
+	}
 	if value == nil {
 		return
 	}
@@ -270,6 +280,16 @@ func (s *Session) SetMap(value map[string]interface{}) (err error) {
 
 	s.updatedAt()
 	return
+}
+
+// Readonly
+func (s *Session) Readonly() bool {
+	return s.readonly
+}
+
+// EnableReadonly enable session readonly
+func (s *Session) EnableReadonly() {
+	s.readonly = true
 }
 
 // Refresh refresh session (update updatedAt)
