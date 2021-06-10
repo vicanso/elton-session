@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -134,6 +135,38 @@ func TestCommit(t *testing.T) {
 	assert.Nil(err, "session commit fail")
 	err = s.Commit(ttl)
 	assert.Equal(err, ErrDuplicateCommit, "duplicate commit should return error")
+}
+
+func TestIgnoreModified(t *testing.T) {
+	assert := assert.New(t)
+	store, err := NewMemoryStore(10)
+	assert.Nil(err, "new memory store fail")
+	ttl := time.Second
+	id := "id"
+	s := Session{
+		Store: store,
+	}
+	s.ID = id
+	s.Set("a", "abc")
+	err = s.Commit(ttl)
+	assert.Nil(err)
+	data, err := store.Get(id)
+	assert.Nil(err)
+	assert.True(strings.Contains(string(data), `"a":"abc"`))
+
+	s1 := Session{
+		Store: store,
+	}
+	s1.ID = id
+	s1.Set("a", "def")
+	// 忽略更新后，commit不会提交任何数据
+	s1.EnableIgnoreModified()
+	err = s1.Commit(ttl)
+	assert.Nil(err)
+	data1, err := store.Get(id)
+	assert.Nil(err)
+	// 数据无变化
+	assert.Equal(data, data1)
 }
 
 func TestSession(t *testing.T) {

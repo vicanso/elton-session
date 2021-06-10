@@ -1,6 +1,7 @@
 # elton-session
 
-[![Build Status](https://img.shields.io/travis/vicanso/elton-session.svg?label=linux+build)](https://travis-ci.org/vicanso/elton-session)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/vicanso/elton-session/blob/master/LICENSE)
+[![Build Status](https://github.com/vicanso/elton-session/workflows/Test/badge.svg)](https://github.com/vicanso/elton-session/actions)
 
 Session middleware for elton, it support memory store by default.
 

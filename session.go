@@ -123,6 +123,8 @@ type (
 		committed bool
 		// the session is readonly
 		readonly bool
+		// ignore the modify(not sync data to store)
+		ignoreModified bool
 	}
 	// Store session store
 	Store interface {
@@ -352,9 +354,14 @@ func (s *Session) GetData() M {
 	return s.data
 }
 
+// EnableIgnoreModified changes the ignore modified to true
+func (s *Session) EnableIgnoreModified() {
+	s.ignoreModified = true
+}
+
 // Commit sync the session to store
 func (s *Session) Commit(ttl time.Duration) (err error) {
-	if !s.modified {
+	if !s.modified || s.ignoreModified {
 		return
 	}
 	if s.committed {
