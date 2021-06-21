@@ -147,7 +147,8 @@ func TestIgnoreModified(t *testing.T) {
 		Store: store,
 	}
 	s.ID = id
-	s.Set("a", "abc")
+	err = s.Set("a", "abc")
+	assert.Nil(err)
 	err = s.Commit(ttl)
 	assert.Nil(err)
 	data, err := store.Get(id)
@@ -158,7 +159,8 @@ func TestIgnoreModified(t *testing.T) {
 		Store: store,
 	}
 	s1.ID = id
-	s1.Set("a", "def")
+	err = s1.Set("a", "def")
+	assert.Nil(err)
 	// 忽略更新后，commit不会提交任何数据
 	s1.EnableIgnoreModified()
 	err = s1.Commit(ttl)
