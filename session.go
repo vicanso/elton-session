@@ -23,6 +23,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"math/rand"
 	"net/http"
@@ -129,11 +130,11 @@ type (
 	// Store session store
 	Store interface {
 		// Get get the session data
-		Get(string) ([]byte, error)
+		Get(context.Context, string) ([]byte, error)
 		// Set set the session data
-		Set(string, []byte, time.Duration) error
+		Set(context.Context, string, []byte, time.Duration) error
 		// Destroy remove the session data
-		Destroy(string) error
+		Destroy(context.Context, string) error
 	}
 )
 
@@ -143,6 +144,7 @@ var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01
 func generateID() string {
 	b := make([]rune, 24)
 	for i := range b {
+		rand.Seed(time.Now().UnixNano())
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return string(b)
@@ -168,66 +170,65 @@ func wrapError(err error) *hes.Error {
 	return he
 }
 
-func getInitMap() M {
+func initMap() M {
 	m := make(M)
 	m[CreatedAt] = time.Now().Format(time.RFC3339)
 	return m
 }
 
-func (s *Session) fetch() (err error) {
+func (s *Session) fetch(ctx context.Context) error {
 	if s.fetched {
-		return
+		return nil
 	}
 	store := s.Store
 	var buf []byte
 	if s.ID != "" {
-		buf, err = store.Get(s.ID)
+		b, err := store.Get(ctx, s.ID)
 		if err != nil {
-			return
+			return err
 		}
+		buf = b
 	}
 	m := make(M)
 	if len(buf) == 0 {
-		m = getInitMap()
+		m = initMap()
 	} else {
-		err = json.Unmarshal(buf, &m)
-	}
-	if err != nil {
-		return
+		err := json.Unmarshal(buf, &m)
+		if err != nil {
+			return err
+		}
 	}
 	s.fetched = true
 	s.data = m
-	return
+	return nil
 }
 
 // Fetch fetch the session data from store
-func (s *Session) Fetch() (m M, err error) {
+func (s *Session) Fetch(ctx context.Context) (m M, err error) {
 	if s.fetched {
-		m = s.data
-		return
+		return s.data, nil
 	}
-	err = s.fetch()
+	err = s.fetch(ctx)
 	if err != nil {
-		return
+		return nil, err
 	}
-	m = s.data
-	return
+	return s.data, nil
 }
 
 // Destroy remove the data from store and reset session data
-func (s *Session) Destroy() (err error) {
+func (s *Session) Destroy(ctx context.Context) error {
 	if s.ID == "" {
-		return
+		return nil
 	}
 	store := s.Store
-	m := getInitMap()
+	m := initMap()
 	s.data = m
-	err = store.Destroy(s.ID)
+	err := store.Destroy(ctx, s.ID)
 	if err != nil {
-		return
+		return err
 	}
 	s.ID = ""
-	return
+	return nil
 }
 
 func (s *Session) updatedAt() {
@@ -236,17 +237,17 @@ func (s *Session) updatedAt() {
 }
 
 // Set set data to session
-func (s *Session) Set(key string, value interface{}) (err error) {
+func (s *Session) Set(ctx context.Context, key string, value interface{}) error {
 	if s.readonly {
 		return ErrIsReadonly
 	}
 	if key == "" {
-		return
+		return nil
 	}
 	if !s.fetched {
-		err = s.fetch()
+		err := s.fetch(ctx)
 		if err != nil {
-			return
+			return err
 		}
 	}
 	if value == nil {
@@ -255,21 +256,21 @@ func (s *Session) Set(key string, value interface{}) (err error) {
 		s.data[key] = value
 	}
 	s.updatedAt()
-	return
+	return nil
 }
 
 // SetMap set map data to session
-func (s *Session) SetMap(value map[string]interface{}) (err error) {
+func (s *Session) SetMap(ctx context.Context, value map[string]interface{}) error {
 	if s.readonly {
 		return ErrIsReadonly
 	}
 	if value == nil {
-		return
+		return nil
 	}
 	if !s.fetched {
-		err = s.fetch()
+		err := s.fetch(ctx)
 		if err != nil {
-			return
+			return err
 		}
 	}
 	for k, v := range value {
@@ -281,7 +282,7 @@ func (s *Session) SetMap(value map[string]interface{}) (err error) {
 	}
 
 	s.updatedAt()
-	return
+	return nil
 }
 
 // Readonly
@@ -295,15 +296,15 @@ func (s *Session) EnableReadonly() {
 }
 
 // Refresh refresh session (update updatedAt)
-func (s *Session) Refresh() (err error) {
+func (s *Session) Refresh(ctx context.Context) error {
 	if !s.fetched {
-		err = s.fetch()
+		err := s.fetch(ctx)
 		if err != nil {
-			return
+			return err
 		}
 	}
 	s.updatedAt()
-	return
+	return nil
 }
 
 // Get get data from session's data
@@ -360,31 +361,29 @@ func (s *Session) EnableIgnoreModified() {
 }
 
 // Commit sync the session to store
-func (s *Session) Commit(ttl time.Duration) (err error) {
+func (s *Session) Commit(ctx context.Context, ttl time.Duration) error {
 	if !s.modified || s.ignoreModified {
-		return
+		return nil
 	}
 	if s.committed {
-		err = ErrDuplicateCommit
-		return
+		return ErrDuplicateCommit
 	}
-	// 如果session id为空，则生成新的session id
+	// 如果session id为空，commit时则出错
 	if s.ID == "" {
-		err = ErrIDNil
-		return
+		return ErrIDNil
 	}
 
 	buf, err := json.Marshal(s.data)
 	if err != nil {
-		return
+		return err
 	}
 
-	err = s.Store.Set(s.ID, buf, ttl)
+	err = s.Store.Set(ctx, s.ID, buf, ttl)
 	if err != nil {
-		return
+		return err
 	}
 	s.committed = true
-	return
+	return nil
 }
 
 // New create a new session middleware
@@ -405,7 +404,7 @@ func New(config Config) elton.Handler {
 	if skipper == nil {
 		skipper = elton.DefaultSkipper
 	}
-	return func(c *elton.Context) (err error) {
+	return func(c *elton.Context) error {
 		if skipper(c) {
 			return c.Next()
 		}
@@ -418,18 +417,16 @@ func New(config Config) elton.Handler {
 		}
 		id, err := getID(c)
 		if err != nil {
-			err = wrapError(err)
-			return
+			return wrapError(err)
 		}
 		if id != "" {
 			s.ID = id
 		}
 		// 拉取session（默认都拉取，未做动态拉取）
 		if !config.LazyFetch {
-			err = s.fetch()
+			err = s.fetch(c.Context())
 			if err != nil {
-				err = wrapError(err)
-				return
+				return wrapError(err)
 			}
 		}
 
@@ -438,7 +435,7 @@ func New(config Config) elton.Handler {
 		// 其它中间件的异常，不需要wrap
 		err = c.Next()
 		if err != nil {
-			return
+			return err
 		}
 		if s.modified {
 			// 如果session 有修改而且未生成session id
@@ -446,18 +443,17 @@ func New(config Config) elton.Handler {
 				uid := genID()
 				err = setID(c, uid)
 				if err != nil {
-					err = wrapError(err)
-					return
+					return wrapError(err)
 				}
 				s.ID = uid
 			}
 			// 提交session 数据
-			err = s.Commit(expired)
+			err = s.Commit(c.Context(), expired)
 			if err != nil {
-				err = wrapError(err)
+				return wrapError(err)
 			}
 		}
-		return
+		return nil
 	}
 }
 
@@ -478,7 +474,7 @@ func NewByCookie(config CookieConfig) elton.Handler {
 		}
 		return cookie.Value, nil
 	}
-	setID := func(c *elton.Context, id string) (err error) {
+	setID := func(c *elton.Context, id string) error {
 		setCookie := c.AddCookie
 		if config.Signed {
 			setCookie = c.AddSignedCookie
@@ -494,7 +490,7 @@ func NewByCookie(config CookieConfig) elton.Handler {
 			Secure:   config.Secure,
 			HttpOnly: config.HttpOnly,
 		})
-		return
+		return nil
 	}
 
 	return New(Config{
@@ -516,10 +512,10 @@ func NewByHeader(config HeaderConfig) elton.Handler {
 		id := c.GetRequestHeader(config.Name)
 		return id, nil
 	}
-	setID := func(c *elton.Context, id string) (err error) {
+	setID := func(c *elton.Context, id string) error {
 		// set session id to response id
 		c.SetHeader(config.Name, id)
-		return
+		return nil
 	}
 	return New(Config{
 		Store:   config.Store,

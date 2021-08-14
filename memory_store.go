@@ -23,6 +23,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -71,7 +72,7 @@ type (
 )
 
 // Get get the seesion from memory
-func (ms *MemoryStore) Get(key string) (data []byte, err error) {
+func (ms *MemoryStore) Get(_ context.Context, key string) (data []byte, err error) {
 	client := ms.client
 	if client == nil {
 		err = ErrNotInit
@@ -93,7 +94,7 @@ func (ms *MemoryStore) Get(key string) (data []byte, err error) {
 }
 
 // Set set the session to memory
-func (ms *MemoryStore) Set(key string, data []byte, ttl time.Duration) (err error) {
+func (ms *MemoryStore) Set(_ context.Context, key string, data []byte, ttl time.Duration) (err error) {
 	client := ms.client
 	if client == nil {
 		err = ErrNotInit
@@ -109,7 +110,7 @@ func (ms *MemoryStore) Set(key string, data []byte, ttl time.Duration) (err erro
 }
 
 // Destroy remove the session from memory
-func (ms *MemoryStore) Destroy(key string) (err error) {
+func (ms *MemoryStore) Destroy(_ context.Context, key string) (err error) {
 	client := ms.client
 	if client == nil {
 		err = ErrNotInit

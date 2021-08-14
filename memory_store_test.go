@@ -23,6 +23,7 @@
 package session
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -34,23 +35,24 @@ func TestMemoryStore(t *testing.T) {
 	data := []byte("tree.xie")
 	ttl := 300 * time.Second
 	ms, _ := NewMemoryStore(1024)
+	ctx := context.Background()
 
 	t.Run("not init", func(t *testing.T) {
 		assert := assert.New(t)
 		tmp := &MemoryStore{}
-		_, err := tmp.Get(key)
+		_, err := tmp.Get(ctx, key)
 		assert.Equal(err, ErrNotInit)
 
-		err = tmp.Set(key, data, ttl)
+		err = tmp.Set(ctx, key, data, ttl)
 		assert.Equal(err, ErrNotInit)
 
-		err = tmp.Destroy(key)
+		err = tmp.Destroy(ctx, key)
 		assert.Equal(err, ErrNotInit)
 	})
 
 	t.Run("get not exists data", func(t *testing.T) {
 		assert := assert.New(t)
-		buf, err := ms.Get(key)
+		buf, err := ms.Get(ctx, key)
 
 		assert.Nil(err)
 		assert.Empty(buf, "should return empty bytes")
@@ -58,28 +60,28 @@ func TestMemoryStore(t *testing.T) {
 
 	t.Run("set data", func(t *testing.T) {
 		assert := assert.New(t)
-		err := ms.Set(key, data, ttl)
+		err := ms.Set(ctx, key, data, ttl)
 		assert.Nil(err)
-		buf, err := ms.Get(key)
+		buf, err := ms.Get(ctx, key)
 		assert.Nil(err)
 		assert.Equal(data, buf, "the data isn't the same after set")
 	})
 
 	t.Run("destroy", func(t *testing.T) {
 		assert := assert.New(t)
-		err := ms.Destroy(key)
+		err := ms.Destroy(ctx, key)
 		assert.Nil(err)
-		buf, err := ms.Get(key)
+		buf, err := ms.Get(ctx, key)
 		assert.Nil(err)
 		assert.Empty(buf, "should return empty bytes after destroy")
 	})
 
 	t.Run("expired", func(t *testing.T) {
 		assert := assert.New(t)
-		err := ms.Set(key, data, 0)
+		err := ms.Set(ctx, key, data, 0)
 		assert.Nil(err)
 		time.Sleep(time.Second)
-		buf, err := ms.Get(key)
+		buf, err := ms.Get(ctx, key)
 		assert.Nil(err)
 		assert.Empty(buf, "expired data should be nil")
 	})
@@ -87,7 +89,7 @@ func TestMemoryStore(t *testing.T) {
 	t.Run("get data", func(t *testing.T) {
 		assert := assert.New(t)
 		ms.client.Add(key, data)
-		buf, err := ms.Get(key)
+		buf, err := ms.Get(ctx, key)
 		assert.Nil(err)
 		assert.Empty(buf, "get invalid data should be empty")
 	})
@@ -103,14 +105,15 @@ func TestMemoryStoreFlush(t *testing.T) {
 		SaveAs:   "/tmp/elton-session-store",
 		Interval: time.Second,
 	}
+	ctx := context.Background()
 	store, err := NewMemoryStoreByConfig(config)
 	assert.Nil(err, "new memory store fail")
-	_ = store.Set(key, value, ttl)
+	_ = store.Set(ctx, key, value, ttl)
 	time.Sleep(1100 * time.Millisecond)
 	store.StopFlush()
 	store, err = NewMemoryStoreByConfig(config)
 	assert.Nil(err, "new memory store fail")
-	data, err := store.Get(key)
+	data, err := store.Get(ctx, key)
 	assert.Nil(err)
 	assert.Equal(data, value, "load store from memory fail")
 }

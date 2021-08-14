@@ -39,7 +39,7 @@ func main() {
 		value, _ := c.Get(session.Key)
 		se := value.(*session.Session)
 		views := se.GetInt("views")
-		_ = se.Set("views", views+1)
+		_ = se.Set(c.Context(), "views", views+1)
 		c.BodyBuffer = bytes.NewBufferString("hello world " + strconv.Itoa(views))
 		return
 	})
