@@ -254,7 +254,23 @@ func TestNotFetchError(t *testing.T) {
 	err = s.Refresh(ctx)
 	assert.Nil(err)
 	assert.NotEmpty(s.updatedAt)
+}
 
+func TestSessionGet(t *testing.T) {
+	assert := assert.New(t)
+	c := elton.NewContext(nil, nil)
+	se, exists := Get(c)
+	assert.False(exists)
+	assert.Nil(se)
+
+	sess := &Session{}
+	c.Set(Key, sess)
+	se, exists = Get(c)
+	assert.True(exists)
+	assert.Equal(sess, se)
+
+	se = MustGet(c)
+	assert.Equal(sess, se)
 }
 
 func TestSessionMiddleware(t *testing.T) {

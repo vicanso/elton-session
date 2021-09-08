@@ -386,6 +386,29 @@ func (s *Session) Commit(ctx context.Context, ttl time.Duration) error {
 	return nil
 }
 
+// Get gets the session data from context
+func Get(c *elton.Context) (*Session, bool) {
+	value, ok := c.Get(Key)
+	if !ok {
+		return nil, false
+	}
+	s, ok := value.(*Session)
+	if !ok {
+		return nil, false
+	}
+	return s, true
+}
+
+// MustGet gets the session data from context,
+// if not exists, it will be panic.
+func MustGet(c *elton.Context) *Session {
+	se, _ := Get(c)
+	if se == nil {
+		panic("session is nil")
+	}
+	return se
+}
+
 // New create a new session middleware
 func New(config Config) elton.Handler {
 	store := config.Store
@@ -408,7 +431,7 @@ func New(config Config) elton.Handler {
 		if skipper(c) {
 			return c.Next()
 		}
-		_, exists := c.Get(Key)
+		_, exists := Get(c)
 		if exists {
 			return c.Next()
 		}
