@@ -17,64 +17,10 @@ package main
 import (
 	"bytes"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/vicanso/elton"
-	session "github.com/vicanso/elton-session"
-)
-
-func main() {
-	store, err := session.NewMemoryStore(10)
-	if err != nil {
-		panic(err)
-	}
-	d := elton.New()
-	signedKeys := &elton.RWMutexSignedKeys{}
-	signedKeys.SetKeys([]string{
-		"cuttlefish",
-	})
-	d.SignedKeys = signedKeys
-
-	d.Use(session.NewByCookie(session.CookieConfig{
-		Store:   store,
-		Signed:  true,
-		Expired: 10 * time.Hour,
-		GenID: func() string {
-			// suggest to use uuid function
-			return strconv.FormatInt(time.Now().UnixNano(), 34)
-		},
-		Name:     "jt",
-		Path:     "/",
-		MaxAge:   24 * 3600,
-		HttpOnly: true,
-	}))
-
-	d.GET("/", func(c *elton.Context) (err error) {
-		value, _ := c.Get(session.Key)
-		se := value.(*session.Session)
-		views := se.GetInt("views")
-		se.Set("views", views+1)
-		c.BodyBuffer = bytes.NewBufferString("hello world " + strconv.Itoa(views))
-		return
-	})
-
-	d.ListenAndServe(":3000")
-}
-
-```
-
-## NewByHeader
-
-Get session id from http request header. The first time commit session, it will add a response's header to http response.
-
-```go
-package main
-
-import (
-	"bytes"
-	"strconv"
-	"time"
-
+	"github.com/rs/xid"
 	"github.com/vicanso/elton"
 	session "github.com/vicanso/elton-session"
 )
@@ -96,8 +42,7 @@ func main() {
 		Signed:  true,
 		Expired: 10 * time.Hour,
 		GenID: func() string {
-			// suggest to use uuid function
-			return strconv.FormatInt(time.Now().UnixNano(), 34)
+			return strings.ToUpper(xid.New().String())
 		},
 		Name:     "jt",
 		Path:     "/",
@@ -106,9 +51,10 @@ func main() {
 	}))
 
 	e.GET("/", func(c *elton.Context) (err error) {
-		se := c.Get(session.Key).(*session.Session)
+		value, _ := c.Get(session.Key)
+		se := value.(*session.Session)
 		views := se.GetInt("views")
-		_ = se.Set("views", views+1)
+		_ = se.Set(c.Context(), "views", views+1)
 		c.BodyBuffer = bytes.NewBufferString("hello world " + strconv.Itoa(views))
 		return
 	})
@@ -118,6 +64,64 @@ func main() {
 		panic(err)
 	}
 }
+
+
+```
+
+## NewByHeader
+
+Get session id from http request header. The first time commit session, it will add a response's header to http response.
+
+```go
+package main
+
+import (
+	"bytes"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/rs/xid"
+	"github.com/vicanso/elton"
+	session "github.com/vicanso/elton-session"
+)
+
+func main() {
+	store, err := session.NewMemoryStore(10)
+	if err != nil {
+		panic(err)
+	}
+	e := elton.New()
+	signedKeys := &elton.RWMutexSignedKeys{}
+	signedKeys.SetKeys([]string{
+		"cuttlefish",
+	})
+	e.SignedKeys = signedKeys
+
+	e.Use(session.NewByHeader(session.HeaderConfig{
+		Store:   store,
+		Expired: 10 * time.Hour,
+		GenID: func() string {
+			return strings.ToUpper(xid.New().String())
+		},
+		Name: "jt",
+	}))
+
+	e.GET("/", func(c *elton.Context) (err error) {
+		value, _ := c.Get(session.Key)
+		se := value.(*session.Session)
+		views := se.GetInt("views")
+		_ = se.Set(c.Context(), "views", views+1)
+		c.BodyBuffer = bytes.NewBufferString("hello world " + strconv.Itoa(views))
+		return
+	})
+
+	err = e.ListenAndServe(":3000")
+	if err != nil {
+		panic(err)
+	}
+}
+
 ```
 
 
