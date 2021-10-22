@@ -3,10 +3,8 @@ package main
 import (
 	"bytes"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/rs/xid"
 	"github.com/vicanso/elton"
 	session "github.com/vicanso/elton-session"
 )
@@ -28,7 +26,8 @@ func main() {
 		Signed:  true,
 		Expired: 10 * time.Hour,
 		GenID: func() string {
-			return strings.ToUpper(xid.New().String())
+			// 使用时需要使用uuid等生成唯一id
+			return strconv.Itoa(int(time.Now().UnixNano()))
 		},
 		Name:     "jt",
 		Path:     "/",

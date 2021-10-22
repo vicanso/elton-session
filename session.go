@@ -244,11 +244,9 @@ func (s *Session) Set(ctx context.Context, key string, value interface{}) error 
 	if key == "" {
 		return nil
 	}
-	if !s.fetched {
-		err := s.fetch(ctx)
-		if err != nil {
-			return err
-		}
+	err := s.fetch(ctx)
+	if err != nil {
+		return err
 	}
 	if value == nil {
 		delete(s.data, key)
@@ -267,11 +265,9 @@ func (s *Session) SetMap(ctx context.Context, value map[string]interface{}) erro
 	if value == nil {
 		return nil
 	}
-	if !s.fetched {
-		err := s.fetch(ctx)
-		if err != nil {
-			return err
-		}
+	err := s.fetch(ctx)
+	if err != nil {
+		return err
 	}
 	for k, v := range value {
 		if v == nil {
@@ -297,11 +293,9 @@ func (s *Session) EnableReadonly() {
 
 // Refresh refresh session (update updatedAt)
 func (s *Session) Refresh(ctx context.Context) error {
-	if !s.fetched {
-		err := s.fetch(ctx)
-		if err != nil {
-			return err
-		}
+	err := s.fetch(ctx)
+	if err != nil {
+		return err
 	}
 	s.updatedAt()
 	return nil
@@ -309,9 +303,7 @@ func (s *Session) Refresh(ctx context.Context) error {
 
 // Get get data from session's data
 func (s *Session) Get(key string) interface{} {
-	if !s.fetched {
-		return nil
-	}
+	_ = s.fetch(context.Background())
 	return s.data[key]
 }
 
