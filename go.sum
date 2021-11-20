@@ -1,3 +1,4 @@
+github.com/andybalholm/brotli v1.0.4/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -13,13 +14,14 @@ github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81P
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.7.0 h1:nwc3DEeHmmLAfoZucVR881uASk0Mfjw8xYJ99tb5CcY=
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
-github.com/tidwall/gjson v1.9.4/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
+github.com/tidwall/gjson v1.11.0/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
 github.com/tidwall/match v1.1.1/go.mod h1:eRSPERbgtNPcGhD8UCthc6PmLEQXEWd3PRB5JTxsfmM=
 github.com/tidwall/pretty v1.2.0/go.mod h1:ITEVvHYasfjBbM0u2Pg8T2nJnzm8xPwvNhhsoaGGjNU=
-github.com/vicanso/elton v1.7.0 h1:ilSWuF336Crczqx0Wm/kwLKtT1riomPJPsJTupVbO3A=
-github.com/vicanso/elton v1.7.0/go.mod h1:9P/FRAZlWVZ1bgdh7xMSotcil3L9K8tTM8WaW5alu0w=
-github.com/vicanso/hes v0.3.9 h1:IO21yElX6Xp3w+Lc1O2QIySrJj2jEhnl5dWbqbDYunc=
+github.com/vicanso/elton v1.8.0 h1:POZm3q+YS1qa2fjogOKe/1v/vvQWW3A9bk8YUwFz4JI=
+github.com/vicanso/elton v1.8.0/go.mod h1:k1z/fYjnwhxF2+K4wuDgKZP4EVmQaNiqZziiWb1y+Jc=
 github.com/vicanso/hes v0.3.9/go.mod h1:B0l1NIQM/nYw7owAd+hyHuNnAD8Nsx0T6duhVxmXUBY=
+github.com/vicanso/hes v0.4.0 h1:rSmjHNIRilad9TqLeuer1P0jJzGDkONwzbL2b7FZ6vg=
+github.com/vicanso/hes v0.4.0/go.mod h1:B0l1NIQM/nYw7owAd+hyHuNnAD8Nsx0T6duhVxmXUBY=
 github.com/vicanso/intranet-ip v0.0.1 h1:cYS+mExFsKqewWSuHtFwAqw/CO66GsheB/P1BPmSTx0=
 github.com/vicanso/intranet-ip v0.0.1/go.mod h1:bqQ6VUhxdz0ipSb1kzd6aoZStlp+pB7CTlVmVhgLAxA=
 github.com/vicanso/keygrip v1.2.1 h1:876fXDwGJqxdi4JxZ1lNGBxYswyLZotrs7AA2QWcLeY=

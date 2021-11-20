@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -37,6 +38,18 @@ import (
 	"github.com/vicanso/elton"
 	"github.com/vicanso/hes"
 )
+
+var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+// generateID gen id
+func generateID() string {
+	b := make([]rune, 24)
+	for i := range b {
+		rand.Seed(time.Now().UnixNano())
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
+}
 
 func TestWrapError(t *testing.T) {
 	assert := assert.New(t)
@@ -166,14 +179,6 @@ func TestIgnoreModified(t *testing.T) {
 	s1.ID = id
 	err = s1.Set(ctx, "a", "def")
 	assert.Nil(err)
-	// 忽略更新后，commit不会提交任何数据
-	s1.EnableIgnoreModified()
-	err = s1.Commit(ctx, ttl)
-	assert.Nil(err)
-	data1, err := store.Get(ctx, id)
-	assert.Nil(err)
-	// 数据无变化
-	assert.Equal(data, data1)
 }
 
 func TestSession(t *testing.T) {

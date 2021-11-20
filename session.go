@@ -25,7 +25,6 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"math/rand"
 	"net/http"
 	"time"
 
@@ -124,8 +123,6 @@ type (
 		committed bool
 		// the session is readonly
 		readonly bool
-		// ignore the modify(not sync data to store)
-		ignoreModified bool
 	}
 	// Store session store
 	Store interface {
@@ -137,18 +134,6 @@ type (
 		Destroy(context.Context, string) error
 	}
 )
-
-var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-
-// generateID gen id
-func generateID() string {
-	b := make([]rune, 24)
-	for i := range b {
-		rand.Seed(time.Now().UnixNano())
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
-	}
-	return string(b)
-}
 
 func createError(message string) *hes.Error {
 	return &hes.Error{
@@ -238,23 +223,12 @@ func (s *Session) updatedAt() {
 
 // Set set data to session
 func (s *Session) Set(ctx context.Context, key string, value interface{}) error {
-	if s.readonly {
-		return ErrIsReadonly
-	}
 	if key == "" {
 		return nil
 	}
-	err := s.fetch(ctx)
-	if err != nil {
-		return err
-	}
-	if value == nil {
-		delete(s.data, key)
-	} else {
-		s.data[key] = value
-	}
-	s.updatedAt()
-	return nil
+	return s.SetMap(ctx, map[string]interface{}{
+		key: value,
+	})
 }
 
 // SetMap set map data to session
@@ -347,14 +321,9 @@ func (s *Session) GetData() M {
 	return s.data
 }
 
-// EnableIgnoreModified changes the ignore modified to true
-func (s *Session) EnableIgnoreModified() {
-	s.ignoreModified = true
-}
-
 // Commit sync the session to store
 func (s *Session) Commit(ctx context.Context, ttl time.Duration) error {
-	if !s.modified || s.ignoreModified {
+	if !s.modified {
 		return nil
 	}
 	if s.committed {
