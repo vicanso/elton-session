@@ -24,12 +24,14 @@ package session
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -39,16 +41,14 @@ import (
 	"github.com/vicanso/hes"
 )
 
-var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-
 // generateID gen id
 func generateID() string {
-	b := make([]rune, 24)
-	for i := range b {
-		rand.Seed(time.Now().UnixNano())
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	b := make([]byte, 24)
+	_, err := rand.Read(b)
+	if err != nil {
+		panic(err)
 	}
-	return string(b)
+	return base64.StdEncoding.EncodeToString(b)
 }
 
 func TestWrapError(t *testing.T) {
@@ -381,6 +381,10 @@ func TestSessionMiddleware(t *testing.T) {
 func TestMain(m *testing.M) {
 	// call flag.Parse() here if TestMain uses flags
 	rc := m.Run()
+	// go 1.20获取到Coverage为0
+	if runtime.Version() == "go1.20" {
+		return
+	}
 
 	// rc 0 means we've passed,
 	// and CoverMode will be non empty if run with -cover

@@ -30,7 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/vicanso/hes"
 )
 
@@ -53,7 +53,7 @@ const (
 type (
 	// MemoryStore memory store for session
 	MemoryStore struct {
-		client      *lru.Cache
+		client      *lru.Cache[string, *MemoryStoreInfo]
 		flushStatus int32
 	}
 	// MemoryStoreInfo memory store info
@@ -78,12 +78,8 @@ func (ms *MemoryStore) Get(_ context.Context, key string) (data []byte, err erro
 		err = ErrNotInit
 		return
 	}
-	v, found := client.Get(key)
+	info, found := client.Get(key)
 	if !found {
-		return
-	}
-	info, ok := v.(*MemoryStoreInfo)
-	if !ok {
 		return
 	}
 	if info.ExpiredAt < time.Now().Unix() {
@@ -136,17 +132,9 @@ func (ms *MemoryStore) intervalFlush(saveAs string, interval time.Duration) {
 		}
 		keys := client.Keys()
 		m := make(map[string]*MemoryStoreInfo)
-		for _, k := range keys {
-			key, _ := k.(string)
-			if key == "" {
-				continue
-			}
-			v, found := client.Get(key)
+		for _, key := range keys {
+			info, found := client.Get(key)
 			if !found {
-				continue
-			}
-			info, ok := v.(*MemoryStoreInfo)
-			if !ok {
 				continue
 			}
 			if info.ExpiredAt < time.Now().Unix() {
@@ -167,7 +155,7 @@ func (ms *MemoryStore) StopFlush() {
 
 // NewMemoryStore create new memory store instance
 func NewMemoryStore(size int) (store *MemoryStore, err error) {
-	client, err := lru.New(size)
+	client, err := lru.New[string, *MemoryStoreInfo](size)
 	if err != nil {
 		return
 	}

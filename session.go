@@ -34,10 +34,12 @@ import (
 )
 
 const (
-	// CreatedAt the created time for session
+	// CreatedAt the created time of session
 	CreatedAt = "_createdAt"
-	// UpdatedAt the updated time for session
+	// UpdatedAt the updated time of session
 	UpdatedAt = "_updatedAt"
+	// ExpiredAt the expired time of session
+	ExpiredAt = "_expiredAt"
 	// ErrCategory session error category
 	ErrCategory = "elton-session"
 	// Key session key
@@ -306,14 +308,19 @@ func (s *Session) GetStringSlice(key string) []string {
 	return cast.ToStringSlice(s.Get(key))
 }
 
-// GetCreatedAt get the created at of session
+// GetCreatedAt get the created time of session
 func (s *Session) GetCreatedAt() string {
 	return cast.ToString(s.Get(CreatedAt))
 }
 
-// GetUpdatedAt get the updated at of session
+// GetUpdatedAt get the updated time of session
 func (s *Session) GetUpdatedAt() string {
 	return cast.ToString(s.Get(UpdatedAt))
+}
+
+// GetExpiredAt get the expired time of session
+func (s *Session) GetExpiredAt() string {
+	return cast.ToString(s.Get(ExpiredAt))
 }
 
 // GetData get the session's data
@@ -333,6 +340,8 @@ func (s *Session) Commit(ctx context.Context, ttl time.Duration) error {
 	if s.ID == "" {
 		return ErrIDNil
 	}
+	// 写入store时更新expired at
+	s.data[ExpiredAt] = time.Now().Add(ttl).Format(time.RFC3339)
 
 	buf, err := json.Marshal(s.data)
 	if err != nil {

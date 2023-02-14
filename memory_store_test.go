@@ -88,7 +88,6 @@ func TestMemoryStore(t *testing.T) {
 
 	t.Run("get data", func(t *testing.T) {
 		assert := assert.New(t)
-		ms.client.Add(key, data)
 		buf, err := ms.Get(ctx, key)
 		assert.Nil(err)
 		assert.Empty(buf, "get invalid data should be empty")
