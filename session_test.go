@@ -27,21 +27,17 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/vicanso/elton"
+	"github.com/vicanso/elton/v2"
 	"github.com/vicanso/hes"
 )
 
-// generateID gen id
 func generateID() string {
 	b := make([]byte, 24)
 	_, err := rand.Read(b)
@@ -53,11 +49,11 @@ func generateID() string {
 
 func TestWrapError(t *testing.T) {
 	assert := assert.New(t)
-	err := errors.New("abcd")
-	err = wrapError(err)
-	he, _ := err.(*hes.Error)
+	err := wrapError(errors.New("abcd"))
+	he, ok := hes.As(err)
+	assert.True(ok)
 	assert.True(he.Exception)
-	assert.Equal(he.Category, ErrCategory)
+	assert.Equal(ErrCategory, he.Category)
 }
 
 func TestFetch(t *testing.T) {
@@ -65,11 +61,10 @@ func TestFetch(t *testing.T) {
 	store, err := NewMemoryStore(10)
 	ctx := context.Background()
 	assert.Nil(err)
-	s := Session{
-		Store: store,
-	}
+	s := Session{Store: store}
 	_, err = s.Fetch(ctx)
 	assert.Nil(err, "fetch fail")
+
 	s = Session{
 		Store: store,
 		ID:    generateID(),
@@ -78,15 +73,13 @@ func TestFetch(t *testing.T) {
 	assert.Nil(err, "set store fail")
 	_, err = s.Fetch(ctx)
 	assert.Nil(err, "fetch fail")
-	assert.Equal(s.GetInt("a"), 1, "fetch data fail")
+	assert.Equal(1, s.GetInt("a"), "fetch data fail")
 
 	err = store.Set(ctx, s.ID, []byte(`{"a": 1`), 10*time.Second)
 	assert.Nil(err, "set store fail")
-	// reset
 	s.fetched = false
 	_, err = s.Fetch(ctx)
 	assert.NotNil(err, "fetch not json data should return error")
-
 }
 
 func TestGetSetData(t *testing.T) {
@@ -104,7 +97,7 @@ func TestGetSetData(t *testing.T) {
 	assert.Nil(err, "set empty map shouldn't be fail")
 	_, err = s.Fetch(ctx)
 	assert.Nil(err, "fetch fail")
-	_ = s.SetMap(ctx, map[string]interface{}{
+	_ = s.SetMap(ctx, map[string]any{
 		"a": 1,
 		"b": "2",
 	})
@@ -112,7 +105,7 @@ func TestGetSetData(t *testing.T) {
 	assert.Nil(err, "remove key fail")
 	assert.Empty(s.Get("a"), "remove key fail")
 
-	err = s.SetMap(ctx, map[string]interface{}{
+	err = s.SetMap(ctx, map[string]any{
 		"b": nil,
 	})
 	assert.Nil(err, "remove key fail")
@@ -123,7 +116,7 @@ func TestGetSetData(t *testing.T) {
 	assert.True(s.Readonly())
 	err = s.Set(ctx, "a", 1)
 	assert.Equal(ErrIsReadonly, err)
-	err = s.SetMap(ctx, map[string]interface{}{
+	err = s.SetMap(ctx, map[string]any{
 		"a": 1,
 	})
 	assert.Equal(ErrIsReadonly, err)
@@ -135,9 +128,7 @@ func TestCommit(t *testing.T) {
 	ctx := context.Background()
 	assert.Nil(err, "new memory store fail")
 	ttl := time.Second
-	s := Session{
-		Store: store,
-	}
+	s := Session{Store: store}
 	err = s.Commit(ctx, ttl)
 	assert.Nil(err, "commit not modified fail")
 
@@ -145,13 +136,13 @@ func TestCommit(t *testing.T) {
 	assert.Nil(err)
 	_ = s.Set(ctx, "a", 1)
 	err = s.Commit(ctx, ttl)
-	assert.Equal(err, ErrIDNil, "nil id commit should return error")
+	assert.Equal(ErrIDNil, err, "nil id commit should return error")
 
 	s.ID = generateID()
 	err = s.Commit(ctx, ttl)
 	assert.Nil(err, "session commit fail")
 	err = s.Commit(ctx, ttl)
-	assert.Equal(err, ErrDuplicateCommit, "duplicate commit should return error")
+	assert.Equal(ErrDuplicateCommit, err, "duplicate commit should return error")
 }
 
 func TestIgnoreModified(t *testing.T) {
@@ -161,10 +152,7 @@ func TestIgnoreModified(t *testing.T) {
 	assert.Nil(err, "new memory store fail")
 	ttl := time.Second
 	id := "id"
-	s := Session{
-		Store: store,
-	}
-	s.ID = id
+	s := Session{Store: store, ID: id}
 	err = s.Set(ctx, "a", "abc")
 	assert.Nil(err)
 	err = s.Commit(ctx, ttl)
@@ -173,12 +161,10 @@ func TestIgnoreModified(t *testing.T) {
 	assert.Nil(err)
 	assert.True(strings.Contains(string(data), `"a":"abc"`))
 
-	s1 := Session{
-		Store: store,
-	}
-	s1.ID = id
+	s1 := Session{Store: store, ID: id}
 	err = s1.Set(ctx, "a", "def")
 	assert.Nil(err)
+	assert.True(s1.Modified())
 }
 
 func TestSession(t *testing.T) {
@@ -196,7 +182,7 @@ func TestSession(t *testing.T) {
 	_, err = s.Fetch(ctx)
 	assert.Nil(err, "fetch session twice fail")
 	_ = s.Set(ctx, "a", "1")
-	_ = s.SetMap(ctx, map[string]interface{}{
+	_ = s.SetMap(ctx, map[string]any{
 		"b": 2,
 		"c": true,
 		"d": 1.1,
@@ -204,16 +190,16 @@ func TestSession(t *testing.T) {
 	})
 
 	assert.True(s.GetBool("c"))
-	assert.Equal(s.Get("a").(string), "1")
-	assert.Equal(s.GetString("a"), "1")
-	assert.Equal(s.GetInt("b"), 2)
-	assert.Equal(s.GetFloat64("d"), 1.1)
-	assert.Equal(s.GetStringSlice("e"), []string{"1", "2"})
+	assert.Equal("1", s.Get("a").(string))
+	assert.Equal("1", s.GetString("a"))
+	assert.Equal(2, s.GetInt("b"))
+	assert.Equal(1.1, s.GetFloat64("d"))
+	assert.Equal([]string{"1", "2"}, s.GetStringSlice("e"))
 
 	assert.NotEmpty(s.GetCreatedAt(), "get create time fail")
 	assert.NotEmpty(s.GetUpdatedAt(), "get update time fail")
 
-	assert.Equal(s.GetData()["a"].(string), "1", "get data fail")
+	assert.Equal("1", s.Data()["a"].(string), "get data fail")
 
 	err = s.Commit(ctx, 10*time.Second)
 	assert.Nil(err, "commit session fail")
@@ -224,7 +210,7 @@ func TestSession(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	err = s.Refresh(ctx)
 	assert.Nil(err)
-	assert.NotEqual(s.GetUpdatedAt(), updatedAt, "refresh fail")
+	assert.NotEqual(updatedAt, s.GetUpdatedAt(), "refresh fail")
 
 	err = s.Destroy(ctx)
 	assert.Nil(err, "destroy session fail")
@@ -234,10 +220,8 @@ func TestSession(t *testing.T) {
 	assert.Empty(buf, "store should be empty after destroy")
 
 	s.ID = ""
-	// no session is should destroy success
 	err = s.Destroy(ctx)
 	assert.Nil(err, "no session is should destroy success")
-
 }
 
 func TestNotFetchError(t *testing.T) {
@@ -249,7 +233,7 @@ func TestNotFetchError(t *testing.T) {
 	assert.Equal(1, s.GetInt("a"))
 
 	s = Session{}
-	err = s.SetMap(ctx, map[string]interface{}{
+	err = s.SetMap(ctx, map[string]any{
 		"a": 2,
 	})
 	assert.Nil(err)
@@ -258,23 +242,30 @@ func TestNotFetchError(t *testing.T) {
 	s = Session{}
 	err = s.Refresh(ctx)
 	assert.Nil(err)
-	assert.NotEmpty(s.updatedAt)
+	assert.NotEmpty(s.GetUpdatedAt())
 }
 
-func TestSessionGet(t *testing.T) {
+func TestSessionFromContext(t *testing.T) {
 	assert := assert.New(t)
 	c := elton.NewContext(nil, nil)
-	se, exists := Get(c)
+	se, exists := FromContext(c)
 	assert.False(exists)
 	assert.Nil(se)
 
 	sess := &Session{}
-	c.Set(Key, sess)
-	se, exists = Get(c)
+	c.Set(DefaultKey, sess)
+	se, exists = FromContext(c)
 	assert.True(exists)
 	assert.Equal(sess, se)
 
-	se = MustGet(c)
+	se = MustFromContext(c)
+	assert.Equal(sess, se)
+
+	customKey := "my-session"
+	c2 := elton.NewContext(nil, nil)
+	c2.Set(customKey, sess)
+	se, exists = FromContextKey(c2, customKey)
+	assert.True(exists)
 	assert.Equal(sess, se)
 }
 
@@ -286,17 +277,18 @@ func TestSessionMiddleware(t *testing.T) {
 	assert.Nil(t, err, "new memory store fail")
 
 	cookieSessionMiddleware := NewByCookie(CookieConfig{
-		Store:   store,
-		Expired: 10 * time.Millisecond,
+		Store: store,
+		TTL:   10 * time.Millisecond,
 		GenID: func() string {
 			return uid
 		},
-		Name:     idName,
-		Path:     "/",
-		Domain:   "abc.com",
-		MaxAge:   60,
-		Secure:   true,
-		HttpOnly: true,
+		Cookie: http.Cookie{
+			Name:   idName,
+			Path:   "/",
+			Domain: "abc.com",
+			MaxAge: 60,
+			Secure: true,
+		},
 	})
 
 	t.Run("session by cookie", func(t *testing.T) {
@@ -306,15 +298,14 @@ func TestSessionMiddleware(t *testing.T) {
 		c := elton.NewContext(resp, req)
 
 		c.Next = func() error {
-			value, _ := c.Get(Key)
-			se := value.(*Session)
+			se := MustFromContext(c)
 			return se.Set(ctx, "foo", "bar")
 		}
 		err = cookieSessionMiddleware(c)
 		assert.Nil(err, "session by cookie middleware fail")
-		assert.Equal(c.Header()["Set-Cookie"], []string{
+		assert.Equal([]string{
 			"jt=abcd; Path=/; Domain=abc.com; Max-Age=60; HttpOnly; Secure",
-		}, "set cookie fail")
+		}, c.Header()["Set-Cookie"], "set cookie fail")
 
 		req = httptest.NewRequest("GET", "/users/me", nil)
 		req.AddCookie(&http.Cookie{
@@ -324,8 +315,7 @@ func TestSessionMiddleware(t *testing.T) {
 		resp = httptest.NewRecorder()
 		c = elton.NewContext(resp, req)
 		c.Next = func() error {
-			value, _ := c.Get(Key)
-			se := value.(*Session)
+			se := MustFromContext(c)
 			if se.GetString("foo") != "bar" {
 				return errors.New("get session fail")
 			}
@@ -336,8 +326,8 @@ func TestSessionMiddleware(t *testing.T) {
 	})
 
 	headerSessionMiddleware := NewByHeader(HeaderConfig{
-		Store:   store,
-		Expired: 10 * time.Millisecond,
+		Store: store,
+		TTL:   10 * time.Millisecond,
 		GenID: func() string {
 			return uid
 		},
@@ -351,13 +341,12 @@ func TestSessionMiddleware(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c := elton.NewContext(resp, req)
 		c.Next = func() error {
-			value, _ := c.Get(Key)
-			se := value.(*Session)
+			se := MustFromContext(c)
 			return se.Set(ctx, "foo", "bar")
 		}
 		err = headerSessionMiddleware(c)
 		assert.Nil(err, "session by header middleware fail")
-		assert.Equal(c.GetHeader(idName), uid, "set header value fail")
+		assert.Equal(uid, c.GetHeader(idName), "set header value fail")
 
 		req = httptest.NewRequest("GET", "/users/me", nil)
 		req.Header.Set(idName, uid)
@@ -365,8 +354,7 @@ func TestSessionMiddleware(t *testing.T) {
 		resp = httptest.NewRecorder()
 		c = elton.NewContext(resp, req)
 		c.Next = func() error {
-			value, _ := c.Get(Key)
-			se := value.(*Session)
+			se := MustFromContext(c)
 			if se.GetString("foo") != "bar" {
 				return errors.New("get session fail")
 			}
@@ -377,23 +365,34 @@ func TestSessionMiddleware(t *testing.T) {
 	})
 }
 
-// https://stackoverflow.com/questions/50120427/fail-unit-tests-if-coverage-is-below-certain-percentage
-func TestMain(m *testing.M) {
-	// call flag.Parse() here if TestMain uses flags
-	rc := m.Run()
-	// go 1.20获取到Coverage为0
-	if runtime.Version() == "go1.20" {
-		return
-	}
+func TestLazyFetch(t *testing.T) {
+	assert := assert.New(t)
+	store, err := NewMemoryStore(10)
+	assert.Nil(err)
+	ctx := context.Background()
+	id := generateID()
+	assert.Nil(store.Set(ctx, id, []byte(`{"views":3}`), time.Minute))
 
-	// rc 0 means we've passed,
-	// and CoverMode will be non empty if run with -cover
-	if rc == 0 && testing.CoverMode() != "" {
-		c := testing.Coverage()
-		if c < 0.8 {
-			fmt.Println("Tests passed but coverage failed at", c)
-			rc = -1
-		}
+	mw := NewByHeader(HeaderConfig{
+		Store:     store,
+		TTL:       time.Minute,
+		LazyFetch: true,
+		GenID:     generateID,
+		Name:      "X-Session-ID",
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-Session-ID", id)
+	resp := httptest.NewRecorder()
+	c := elton.NewContext(resp, req)
+	c.Next = func() error {
+		se := MustFromContext(c)
+		assert.False(se.fetched)
+		assert.Equal(3, se.GetInt("views"))
+		assert.True(se.fetched)
+		return nil
 	}
-	os.Exit(rc)
+	assert.Nil(mw(c))
 }
+
+

@@ -20,157 +20,177 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package session is session middleware for elton v2.
+//
+// It loads session data from a pluggable Store, exposes a typed Session API on
+// the request context, and commits modified data after the handler chain when
+// the session was written.
+//
+// Session IDs can be carried by signed/unsigned cookies (NewByCookie), request
+// headers (NewByHeader), or any custom Get/Set pair (New).
 package session
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/spf13/cast"
-	"github.com/vicanso/elton"
+	"github.com/vicanso/elton/v2"
 	"github.com/vicanso/hes"
 )
 
 const (
-	// CreatedAt the created time of session
+	// CreatedAt is the metadata key for session creation time (RFC3339).
 	CreatedAt = "_createdAt"
-	// UpdatedAt the updated time of session
+	// UpdatedAt is the metadata key for last modification time (RFC3339).
 	UpdatedAt = "_updatedAt"
-	// ExpiredAt the expired time of session
+	// ExpiredAt is the metadata key for store expiry time (RFC3339), set on Commit.
 	ExpiredAt = "_expiredAt"
-	// ErrCategory session error category
+	// ErrCategory is the hes error category for this middleware.
 	ErrCategory = "elton-session"
-	// Key session key
-	Key = "_session"
+	// DefaultKey is the default context key for *Session.
+	DefaultKey = "_session"
 )
 
 var (
-	// ErrDuplicateCommit duplicate commit
-	ErrDuplicateCommit = createError("duplicate commit")
-	// ErrIDNil session id is nil
-	ErrIDNil = createError("session id is nil")
-	// ErrIsReadonly session is readonly
-	ErrIsReadonly = createError("session is readonly")
+	// ErrDuplicateCommit is returned when Commit is called more than once
+	// after the session was modified.
+	ErrDuplicateCommit = newError("duplicate commit")
+	// ErrIDNil is returned when Commit is called without a session ID.
+	ErrIDNil = newError("session id is nil")
+	// ErrIsReadonly is returned when Set/SetMap is called on a readonly session.
+	ErrIsReadonly = newError("session is readonly")
 )
 
-type (
-	// M alias
-	M map[string]interface{}
-	// Config session middleware config
-	Config struct {
-		// LazyFetch if set true, the fetch function isn't called when initialization
-		LazyFetch bool
-		// Store session store
-		Store Store
-		// Skipper skipper
-		Skipper elton.Skipper
-		// Expired session store's max age
-		Expired time.Duration
-		// GenID generate uid
-		GenID func() string
+// M is the session data map type.
+type M map[string]any
 
-		Get func(c *elton.Context) (string, error)
-		Set func(c *elton.Context, id string) error
-	}
-	// CookieConfig session cookie config
-	CookieConfig struct {
-		// Store session store
-		Store Store
-		// Skipper skipper
-		Skipper elton.Skipper
-		// Expired session store's max age
-		Expired time.Duration
-		// GenID generate uid
-		GenID func() string
-
-		// Signed signed cookie
-		Signed bool
-		// Cookie cookie config
-		Name     string
-		Path     string
-		Domain   string
-		MaxAge   int
-		Secure   bool
-		HttpOnly bool
-	}
-	// HeaderConfig session header config
-	HeaderConfig struct {
-		// Store session store
-		Store Store
-		// Skipper skipper
-		Skipper elton.Skipper
-		// Expired session store's max age
-		Expired time.Duration
-		// GenID generate uid
-		GenID func() string
-
-		// Name header's name
-		Name string
-	}
-	// Session session struct
-	Session struct {
-		// Store session store
-		Store Store
-		// ID the session id
-		ID string
-		// the data fetch from session
-		data M
-		// the data has been fetched
-		fetched bool
-		// the data has been modified
-		modified bool
-		// the session has been committed
-		committed bool
-		// the session is readonly
-		readonly bool
-	}
-	// Store session store
-	Store interface {
-		// Get get the session data
-		Get(context.Context, string) ([]byte, error)
-		// Set set the session data
-		Set(context.Context, string, []byte, time.Duration) error
-		// Destroy remove the session data
-		Destroy(context.Context, string) error
-	}
-)
-
-func createError(message string) *hes.Error {
-	return &hes.Error{
-		Message:    message,
-		Category:   ErrCategory,
-		StatusCode: http.StatusInternalServerError,
-		Exception:  true,
-	}
+// Store persists session payloads keyed by session ID.
+type Store interface {
+	// Get returns session bytes for id. Missing keys should return (nil, nil).
+	Get(ctx context.Context, id string) ([]byte, error)
+	// Set stores data with the given TTL.
+	Set(ctx context.Context, id string, data []byte, ttl time.Duration) error
+	// Destroy removes the session for id.
+	Destroy(ctx context.Context, id string) error
 }
 
-func wrapError(err error) *hes.Error {
-	he, ok := err.(*hes.Error)
-	if !ok {
-		he = hes.NewWithError(err)
-		he.StatusCode = http.StatusInternalServerError
-		he.Category = ErrCategory
+// Config is the generic session middleware configuration.
+// Get/Set own how the session ID is read from and written to the request/response.
+type Config struct {
+	// Store is required.
+	Store Store
+	// Skipper skips this middleware when it returns true.
+	Skipper elton.Skipper
+	// TTL is the store max age and is required (must be > 0).
+	TTL time.Duration
+	// LazyFetch defers loading session data until the first read/write.
+	LazyFetch bool
+	// GenID generates a new session ID when the session is first committed.
+	// Required.
+	GenID func() string
+	// Get returns the session ID for the request. Empty string means no ID yet.
+	// Required.
+	Get func(c *elton.Context) (string, error)
+	// Set writes a newly generated session ID to the response. Required.
+	Set func(c *elton.Context, id string) error
+	// Key is the context key for *Session. Default: DefaultKey.
+	Key string
+}
+
+// CookieConfig configures session ID transport via HTTP cookies.
+type CookieConfig struct {
+	// Store is required.
+	Store Store
+	// Skipper skips this middleware when it returns true.
+	Skipper elton.Skipper
+	// TTL is the store max age and is required (must be > 0).
+	TTL time.Duration
+	// LazyFetch defers loading session data until the first read/write.
+	LazyFetch bool
+	// GenID generates a new session ID when the session is first committed.
+	// Required.
+	GenID func() string
+	// Signed enables signed cookies (requires elton.SignedKeys on the engine).
+	Signed bool
+	// Cookie is the cookie template. Cookie.Name is required.
+	// HttpOnly is forced to true; empty Path defaults to "/".
+	Cookie http.Cookie
+	// Key is the context key for *Session. Default: DefaultKey.
+	Key string
+}
+
+// HeaderConfig configures session ID transport via a request/response header.
+type HeaderConfig struct {
+	// Store is required.
+	Store Store
+	// Skipper skips this middleware when it returns true.
+	Skipper elton.Skipper
+	// TTL is the store max age and is required (must be > 0).
+	TTL time.Duration
+	// LazyFetch defers loading session data until the first read/write.
+	LazyFetch bool
+	// GenID generates a new session ID when the session is first committed.
+	// Required.
+	GenID func() string
+	// Name is the request header to read and the response header to write.
+	// Required.
+	Name string
+	// Key is the context key for *Session. Default: DefaultKey.
+	Key string
+}
+
+// Session holds per-request session state and provides typed accessors.
+type Session struct {
+	// Store is the session store.
+	Store Store
+	// ID is the session identifier. Empty until first commit (or when provided by client).
+	ID string
+
+	data      M
+	fetched   bool
+	modified  bool
+	committed bool
+	readonly  bool
+}
+
+func newError(message string) *hes.Error {
+	return hes.New(
+		message,
+		hes.WithCategory(ErrCategory),
+		hes.WithStatus(http.StatusInternalServerError),
+		hes.WithException(),
+	)
+}
+
+func wrapError(err error) error {
+	if err == nil {
+		return nil
 	}
-	he.Exception = true
-	return he
+	return hes.Wrap(
+		err,
+		hes.WithCategory(ErrCategory),
+		hes.WithStatus(http.StatusInternalServerError),
+		hes.WithException(),
+	)
 }
 
 func initMap() M {
-	m := make(M)
-	m[CreatedAt] = time.Now().Format(time.RFC3339)
-	return m
+	return M{
+		CreatedAt: time.Now().Format(time.RFC3339),
+	}
 }
 
 func (s *Session) fetch(ctx context.Context) error {
 	if s.fetched {
 		return nil
 	}
-	store := s.Store
 	var buf []byte
 	if s.ID != "" {
-		b, err := store.Get(ctx, s.ID)
+		b, err := s.Store.Get(ctx, s.ID)
 		if err != nil {
 			return err
 		}
@@ -180,8 +200,7 @@ func (s *Session) fetch(ctx context.Context) error {
 	if len(buf) == 0 {
 		m = initMap()
 	} else {
-		err := json.Unmarshal(buf, &m)
-		if err != nil {
+		if err := json.Unmarshal(buf, &m); err != nil {
 			return err
 		}
 	}
@@ -190,59 +209,59 @@ func (s *Session) fetch(ctx context.Context) error {
 	return nil
 }
 
-// Fetch fetch the session data from store
-func (s *Session) Fetch(ctx context.Context) (m M, err error) {
+// Fetch loads session data from the store (no-op if already fetched).
+func (s *Session) Fetch(ctx context.Context) (M, error) {
 	if s.fetched {
 		return s.data, nil
 	}
-	err = s.fetch(ctx)
-	if err != nil {
+	if err := s.fetch(ctx); err != nil {
 		return nil, err
 	}
 	return s.data, nil
 }
 
-// Destroy remove the data from store and reset session data
+// Destroy removes the session from the store and resets in-memory state.
 func (s *Session) Destroy(ctx context.Context) error {
 	if s.ID == "" {
+		s.data = initMap()
+		s.fetched = true
+		s.modified = false
+		s.committed = false
 		return nil
 	}
-	store := s.Store
-	m := initMap()
-	s.data = m
-	err := store.Destroy(ctx, s.ID)
-	if err != nil {
+	if err := s.Store.Destroy(ctx, s.ID); err != nil {
 		return err
 	}
 	s.ID = ""
+	s.data = initMap()
+	s.fetched = true
+	s.modified = false
+	s.committed = false
 	return nil
 }
 
-func (s *Session) updatedAt() {
+func (s *Session) touchUpdatedAt() {
 	s.data[UpdatedAt] = time.Now().Format(time.RFC3339)
 	s.modified = true
 }
 
-// Set set data to session
-func (s *Session) Set(ctx context.Context, key string, value interface{}) error {
+// Set sets a single key. A nil value deletes the key.
+func (s *Session) Set(ctx context.Context, key string, value any) error {
 	if key == "" {
 		return nil
 	}
-	return s.SetMap(ctx, map[string]interface{}{
-		key: value,
-	})
+	return s.SetMap(ctx, map[string]any{key: value})
 }
 
-// SetMap set map data to session
-func (s *Session) SetMap(ctx context.Context, value map[string]interface{}) error {
+// SetMap merges values into the session. Nil values delete keys.
+func (s *Session) SetMap(ctx context.Context, value map[string]any) error {
 	if s.readonly {
 		return ErrIsReadonly
 	}
 	if value == nil {
 		return nil
 	}
-	err := s.fetch(ctx)
-	if err != nil {
+	if err := s.fetch(ctx); err != nil {
 		return err
 	}
 	for k, v := range value {
@@ -252,83 +271,89 @@ func (s *Session) SetMap(ctx context.Context, value map[string]interface{}) erro
 		}
 		s.data[k] = v
 	}
-
-	s.updatedAt()
+	s.touchUpdatedAt()
 	return nil
 }
 
-// Readonly
+// Readonly reports whether the session rejects writes.
 func (s *Session) Readonly() bool {
 	return s.readonly
 }
 
-// EnableReadonly enable session readonly
+// EnableReadonly marks the session as read-only for the rest of the request.
 func (s *Session) EnableReadonly() {
 	s.readonly = true
 }
 
-// Refresh refresh session (update updatedAt)
+// Refresh updates UpdatedAt without changing other fields (marks modified).
 func (s *Session) Refresh(ctx context.Context) error {
-	err := s.fetch(ctx)
-	if err != nil {
+	if err := s.fetch(ctx); err != nil {
 		return err
 	}
-	s.updatedAt()
+	s.touchUpdatedAt()
 	return nil
 }
 
-// Get get data from session's data
-func (s *Session) Get(key string) interface{} {
+// Get returns a raw value by key. It lazy-fetches with context.Background()
+// when data has not been loaded yet; prefer Fetch(ctx) in new code when you
+// need cancellation.
+func (s *Session) Get(key string) any {
 	_ = s.fetch(context.Background())
 	return s.data[key]
 }
 
-// GetBool get bool data from session's data
+// GetBool returns a bool value by key.
 func (s *Session) GetBool(key string) bool {
 	return cast.ToBool(s.Get(key))
 }
 
-// GetString get string data from session's data
+// GetString returns a string value by key.
 func (s *Session) GetString(key string) string {
 	return cast.ToString(s.Get(key))
 }
 
-// GetInt get int data from session's data
+// GetInt returns an int value by key.
 func (s *Session) GetInt(key string) int {
 	return cast.ToInt(s.Get(key))
 }
 
-// GetFloat64 get float64 data from session's data
+// GetFloat64 returns a float64 value by key.
 func (s *Session) GetFloat64(key string) float64 {
 	return cast.ToFloat64(s.Get(key))
 }
 
-// GetStringSlice get string slice data from session's data
+// GetStringSlice returns a []string value by key.
 func (s *Session) GetStringSlice(key string) []string {
 	return cast.ToStringSlice(s.Get(key))
 }
 
-// GetCreatedAt get the created time of session
+// GetCreatedAt returns the session creation timestamp (RFC3339 string).
 func (s *Session) GetCreatedAt() string {
 	return cast.ToString(s.Get(CreatedAt))
 }
 
-// GetUpdatedAt get the updated time of session
+// GetUpdatedAt returns the last modification timestamp (RFC3339 string).
 func (s *Session) GetUpdatedAt() string {
 	return cast.ToString(s.Get(UpdatedAt))
 }
 
-// GetExpiredAt get the expired time of session
+// GetExpiredAt returns the store expiry timestamp (RFC3339 string).
 func (s *Session) GetExpiredAt() string {
 	return cast.ToString(s.Get(ExpiredAt))
 }
 
-// GetData get the session's data
-func (s *Session) GetData() M {
+// Data returns the underlying session map (shared; do not mutate casually).
+func (s *Session) Data() M {
 	return s.data
 }
 
-// Commit sync the session to store
+// Modified reports whether the session has uncommitted writes.
+func (s *Session) Modified() bool {
+	return s.modified
+}
+
+// Commit writes modified session data to the store.
+// No-op when unmodified. Returns ErrDuplicateCommit on a second commit after a write.
 func (s *Session) Commit(ctx context.Context, ttl time.Duration) error {
 	if !s.modified {
 		return nil
@@ -336,29 +361,25 @@ func (s *Session) Commit(ctx context.Context, ttl time.Duration) error {
 	if s.committed {
 		return ErrDuplicateCommit
 	}
-	// 如果session id为空，commit时则出错
 	if s.ID == "" {
 		return ErrIDNil
 	}
-	// 写入store时更新expired at
 	s.data[ExpiredAt] = time.Now().Add(ttl).Format(time.RFC3339)
 
 	buf, err := json.Marshal(s.data)
 	if err != nil {
 		return err
 	}
-
-	err = s.Store.Set(ctx, s.ID, buf, ttl)
-	if err != nil {
+	if err = s.Store.Set(ctx, s.ID, buf, ttl); err != nil {
 		return err
 	}
 	s.committed = true
 	return nil
 }
 
-// Get gets the session data from context
-func Get(c *elton.Context) (*Session, bool) {
-	value, ok := c.Get(Key)
+// FromContext returns the *Session stored on the context.
+func FromContext(c *elton.Context) (*Session, bool) {
+	value, ok := c.Get(DefaultKey)
 	if !ok {
 		return nil, false
 	}
@@ -369,45 +390,63 @@ func Get(c *elton.Context) (*Session, bool) {
 	return s, true
 }
 
-// MustGet gets the session data from context,
-// if not exists, it will be panic.
-func MustGet(c *elton.Context) *Session {
-	se, _ := Get(c)
-	if se == nil {
+// FromContextKey returns the *Session stored under a custom context key.
+func FromContextKey(c *elton.Context, key string) (*Session, bool) {
+	if key == "" {
+		key = DefaultKey
+	}
+	value, ok := c.Get(key)
+	if !ok {
+		return nil, false
+	}
+	s, ok := value.(*Session)
+	if !ok {
+		return nil, false
+	}
+	return s, true
+}
+
+// MustFromContext returns the *Session or panics if missing.
+func MustFromContext(c *elton.Context) *Session {
+	se, ok := FromContext(c)
+	if !ok || se == nil {
 		panic("session is nil")
 	}
 	return se
 }
 
-// New create a new session middleware
+func resolveKey(key string) string {
+	if key == "" {
+		return DefaultKey
+	}
+	return key
+}
+
+// New creates session middleware from Config.
 func New(config Config) elton.Handler {
 	store := config.Store
 	getID := config.Get
 	setID := config.Set
 	genID := config.GenID
-	expired := config.Expired
-	if store == nil ||
-		getID == nil ||
-		setID == nil ||
-		genID == nil ||
-		expired == 0 {
-		panic("require store, get function, set function and expired")
+	ttl := config.TTL
+	if store == nil || getID == nil || setID == nil || genID == nil || ttl <= 0 {
+		panic(errors.New("session requires store, get, set, genID and positive TTL"))
 	}
 	skipper := config.Skipper
 	if skipper == nil {
 		skipper = elton.DefaultSkipper
 	}
+	contextKey := resolveKey(config.Key)
+
 	return func(c *elton.Context) error {
 		if skipper(c) {
 			return c.Next()
 		}
-		_, exists := Get(c)
-		if exists {
+		if _, exists := FromContextKey(c, contextKey); exists {
 			return c.Next()
 		}
-		s := &Session{
-			Store: store,
-		}
+
+		s := &Session{Store: store}
 		id, err := getID(c)
 		if err != nil {
 			return wrapError(err)
@@ -415,106 +454,102 @@ func New(config Config) elton.Handler {
 		if id != "" {
 			s.ID = id
 		}
-		// 拉取session（默认都拉取，未做动态拉取）
 		if !config.LazyFetch {
-			err = s.fetch(c.Context())
-			if err != nil {
+			if err = s.fetch(c.Context()); err != nil {
 				return wrapError(err)
 			}
 		}
 
-		// session 保存至context中
-		c.Set(Key, s)
-		// 其它中间件的异常，不需要wrap
-		err = c.Next()
-		if err != nil {
+		c.Set(contextKey, s)
+		if err = c.Next(); err != nil {
 			return err
 		}
-		if s.modified {
-			// 如果session 有修改而且未生成session id
-			if s.ID == "" {
-				uid := genID()
-				err = setID(c, uid)
-				if err != nil {
-					return wrapError(err)
-				}
-				s.ID = uid
-			}
-			// 提交session 数据
-			err = s.Commit(c.Context(), expired)
-			if err != nil {
+		if !s.modified {
+			return nil
+		}
+		if s.ID == "" {
+			uid := genID()
+			if err = setID(c, uid); err != nil {
 				return wrapError(err)
 			}
+			s.ID = uid
+		}
+		if err = s.Commit(c.Context(), ttl); err != nil {
+			return wrapError(err)
 		}
 		return nil
 	}
 }
 
-// NewByCookie create a session by cookie, which get session id from cookie
+// NewByCookie creates session middleware that stores the session ID in a cookie.
 func NewByCookie(config CookieConfig) elton.Handler {
-	if config.Name == "" {
-		panic("require cookie's name")
+	if config.Cookie.Name == "" {
+		panic(errors.New("session cookie name is required"))
 	}
+	template := config.Cookie
+	template.HttpOnly = true
+	if template.Path == "" {
+		template.Path = "/"
+	}
+	signed := config.Signed
+	name := template.Name
+
 	getID := func(c *elton.Context) (string, error) {
 		getCookie := c.Cookie
-		if config.Signed {
+		if signed {
 			getCookie = c.SignedCookie
 		}
-		// cookie只会因为获取不到而报错，因此忽略
-		cookie, _ := getCookie(config.Name)
+		// Missing cookie is not an error for session bootstrap.
+		cookie, _ := getCookie(name)
 		if cookie == nil {
 			return "", nil
 		}
 		return cookie.Value, nil
 	}
 	setID := func(c *elton.Context, id string) error {
-		setCookie := c.AddCookie
-		if config.Signed {
-			setCookie = c.AddSignedCookie
+		cookie := template
+		cookie.Value = id
+		if signed {
+			c.AddSignedCookie(&cookie)
+		} else {
+			c.AddCookie(&cookie)
 		}
-
-		// 设置cookie
-		setCookie(&http.Cookie{
-			Name:     config.Name,
-			Value:    id,
-			Path:     config.Path,
-			Domain:   config.Domain,
-			MaxAge:   config.MaxAge,
-			Secure:   config.Secure,
-			HttpOnly: config.HttpOnly,
-		})
 		return nil
 	}
 
 	return New(Config{
-		Store:   config.Store,
-		Get:     getID,
-		Set:     setID,
-		GenID:   config.GenID,
-		Expired: config.Expired,
+		Store:     config.Store,
+		Skipper:   config.Skipper,
+		TTL:       config.TTL,
+		LazyFetch: config.LazyFetch,
+		GenID:     config.GenID,
+		Get:       getID,
+		Set:       setID,
+		Key:       config.Key,
 	})
 }
 
-// NewByHeader create a session by header, which get session id from request header
+// NewByHeader creates session middleware that stores the session ID in a header.
 func NewByHeader(config HeaderConfig) elton.Handler {
 	if config.Name == "" {
-		panic("require header's name")
+		panic(errors.New("session header name is required"))
 	}
+	name := config.Name
 	getID := func(c *elton.Context) (string, error) {
-		// get session id from request header
-		id := c.GetRequestHeader(config.Name)
-		return id, nil
+		return c.GetRequestHeader(name), nil
 	}
 	setID := func(c *elton.Context, id string) error {
-		// set session id to response id
-		c.SetHeader(config.Name, id)
+		c.SetHeader(name, id)
 		return nil
 	}
 	return New(Config{
-		Store:   config.Store,
-		Get:     getID,
-		Set:     setID,
-		GenID:   config.GenID,
-		Expired: config.Expired,
+		Store:     config.Store,
+		Skipper:   config.Skipper,
+		TTL:       config.TTL,
+		LazyFetch: config.LazyFetch,
+		GenID:     config.GenID,
+		Get:       getID,
+		Set:       setID,
+		Key:       config.Key,
 	})
 }

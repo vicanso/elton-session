@@ -1,8 +1,5 @@
-export GO111MODULE = on
+.PHONY: test test-cover lint release
 
-.PHONY: test test-cover
-
-# for test
 test:
 	go test -race -cover ./...
 

@@ -3,26 +3,35 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/vicanso/elton-session/blob/master/LICENSE)
 [![Build Status](https://github.com/vicanso/elton-session/workflows/Test/badge.svg)](https://github.com/vicanso/elton-session/actions)
 
-Session middleware for elton, it support memory store by default.
+Session middleware for [elton](https://github.com/vicanso/elton) v2, with a built-in memory store.
 
-Session id store by cookie is more simple. It also support by http header or other ways for session id. 
+Session IDs can be carried by cookie (optionally signed), HTTP header, or any custom Get/Set pair.
+
+## Install
+
+```bash
+go get github.com/vicanso/elton-session/v2
+```
+
+Requires Go 1.24+.
 
 ## NewByCookie
 
-Get session id from cookie(signed). The first time commit session, it will add cookie to http response.
+Reads the session ID from a cookie. On first commit, writes `Set-Cookie` (HttpOnly is always forced).
 
 ```go
 package main
 
 import (
 	"bytes"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/rs/xid"
-	"github.com/vicanso/elton"
-	session "github.com/vicanso/elton-session"
+	"github.com/vicanso/elton/v2"
+	session "github.com/vicanso/elton-session/v2"
 )
 
 func main() {
@@ -32,167 +41,157 @@ func main() {
 	}
 	e := elton.New()
 	signedKeys := &elton.RWMutexSignedKeys{}
-	signedKeys.SetKeys([]string{
-		"cuttlefish",
-	})
+	signedKeys.SetKeys([]string{"cuttlefish"})
 	e.SignedKeys = signedKeys
 
 	e.Use(session.NewByCookie(session.CookieConfig{
-		Store:   store,
-		Signed:  true,
-		Expired: 10 * time.Hour,
+		Store:  store,
+		Signed: true,
+		TTL:    10 * time.Hour,
 		GenID: func() string {
 			return strings.ToUpper(xid.New().String())
 		},
-		Name:     "jt",
-		Path:     "/",
-		MaxAge:   24 * 3600,
-		HttpOnly: true,
+		Cookie: http.Cookie{
+			Name:   "jt",
+			Path:   "/",
+			MaxAge: 24 * 3600,
+			Secure: true,
+		},
 	}))
 
-	e.GET("/", func(c *elton.Context) (err error) {
-		value, _ := c.Get(session.Key)
-		se := value.(*session.Session)
+	e.GET("/", func(c *elton.Context) error {
+		se := session.MustFromContext(c)
 		views := se.GetInt("views")
 		_ = se.Set(c.Context(), "views", views+1)
 		c.BodyBuffer = bytes.NewBufferString("hello world " + strconv.Itoa(views))
-		return
+		return nil
 	})
 
-	err = e.ListenAndServe(":3000")
-	if err != nil {
+	if err := e.ListenAndServe(":3000"); err != nil {
 		panic(err)
 	}
 }
-
-
 ```
 
 ## NewByHeader
 
-Get session id from http request header. The first time commit session, it will add a response's header to http response.
+Reads the session ID from a request header. On first commit, writes the same header on the response.
 
 ```go
-package main
-
-import (
-	"bytes"
-	"strconv"
-	"strings"
-	"time"
-
-	"github.com/rs/xid"
-	"github.com/vicanso/elton"
-	session "github.com/vicanso/elton-session"
-)
-
-func main() {
-	store, err := session.NewMemoryStore(10)
-	if err != nil {
-		panic(err)
-	}
-	e := elton.New()
-	signedKeys := &elton.RWMutexSignedKeys{}
-	signedKeys.SetKeys([]string{
-		"cuttlefish",
-	})
-	e.SignedKeys = signedKeys
-
-	e.Use(session.NewByHeader(session.HeaderConfig{
-		Store:   store,
-		Expired: 10 * time.Hour,
-		GenID: func() string {
-			return strings.ToUpper(xid.New().String())
-		},
-		Name: "jt",
-	}))
-
-	e.GET("/", func(c *elton.Context) (err error) {
-		value, _ := c.Get(session.Key)
-		se := value.(*session.Session)
-		views := se.GetInt("views")
-		_ = se.Set(c.Context(), "views", views+1)
-		c.BodyBuffer = bytes.NewBufferString("hello world " + strconv.Itoa(views))
-		return
-	})
-
-	err = e.ListenAndServe(":3000")
-	if err != nil {
-		panic(err)
-	}
-}
-
+e.Use(session.NewByHeader(session.HeaderConfig{
+	Store: store,
+	TTL:   10 * time.Hour,
+	GenID: func() string {
+		return strings.ToUpper(xid.New().String())
+	},
+	Name: "X-Session-ID",
+}))
 ```
 
-
-## NewMemoryStore
-
-Create a memory store for session.
-
-- `size` max size of store
+## New (custom ID transport)
 
 ```go
-store, err := NewMemoryStore(1024)
+e.Use(session.New(session.Config{
+	Store: store,
+	TTL:   time.Hour,
+	GenID: generateID,
+	Get: func(c *elton.Context) (string, error) {
+		// read id from query, cookie, header, ...
+		return c.QueryParam("sid"), nil
+	},
+	Set: func(c *elton.Context, id string) error {
+		// write id back however you need
+		c.SetHeader("X-Session-ID", id)
+		return nil
+	},
+}))
 ```
 
-## NewMemoryStoreByConfig
-
-Create a memory store for session.
-
-- `config.Size` max size of store
-- `config.SaveAs` save store sa file
-- `config.Interval` flush to file's interval
-
+## Memory store
 
 ```go
-store, err := NewMemoryStore(MemoryStoreConfig{
-	Size: 1024,
-	SaveAs: "/tmp/elton-session-store",
+store, err := session.NewMemoryStore(1024)
+
+store, err := session.NewMemoryStoreByConfig(session.MemoryStoreConfig{
+	Size:     1024,
+	SaveAs:   "/tmp/elton-session-store",
 	Interval: 60 * time.Second,
 })
+// When finished (e.g. process shutdown), stop background flush:
+// store.StopFlush()
 ```
 
-# Other store
+## Custom store
 
-You can use other store for session, like redis and mongodb.
+Implement `session.Store`:
 
 ```go
-type (
-	// RedisStore redis store for session
-	RedisStore struct {
-		client *redis.Client
-		prefix string
-	}
-)
+type Store interface {
+	Get(ctx context.Context, id string) ([]byte, error)
+	Set(ctx context.Context, id string, data []byte, ttl time.Duration) error
+	Destroy(ctx context.Context, id string) error
+}
+```
 
-func (rs *RedisStore) getKey(key string) string {
-	return rs.prefix + key
+Example Redis store:
+
+```go
+type RedisStore struct {
+	client *redis.Client
+	prefix string
 }
 
-// Get get the session from redis
-func (rs *RedisStore) Get(key string) ([]byte, error) {
-	buf, err := rs.client.Get(rs.getKey(key)).Bytes()
+func (rs *RedisStore) key(id string) string {
+	return rs.prefix + id
+}
+
+func (rs *RedisStore) Get(ctx context.Context, id string) ([]byte, error) {
+	buf, err := rs.client.Get(ctx, rs.key(id)).Bytes()
 	if err == redis.Nil {
-		return buf, nil
+		return nil, nil
 	}
 	return buf, err
 }
 
-// Set set the session to redis
-func (rs *RedisStore) Set(key string, data []byte, ttl time.Duration) error {
-	return rs.client.Set(rs.getKey(key), data, ttl).Err()
+func (rs *RedisStore) Set(ctx context.Context, id string, data []byte, ttl time.Duration) error {
+	return rs.client.Set(ctx, rs.key(id), data, ttl).Err()
 }
 
-// Destroy remove the session from redis
-func (rs *RedisStore) Destroy(key string) error {
-	return rs.client.Del(rs.getKey(key)).Err()
-}
-
-// NewRedisStore create new redis store instance
-func NewRedisStore(client *redis.Client, prefix string) *RedisStore {
-	rs := &RedisStore{}
-	rs.client = client
-	rs.prefix = prefix
-	return rs
+func (rs *RedisStore) Destroy(ctx context.Context, id string) error {
+	return rs.client.Del(ctx, rs.key(id)).Err()
 }
 ```
+
+## Session helpers
+
+```go
+se, ok := session.FromContext(c)
+se = session.MustFromContext(c)
+
+// typed getters (JSON-friendly casting)
+se.GetString("account")
+se.GetInt("views")
+se.GetBool("admin")
+
+// metadata
+se.GetCreatedAt()
+se.GetUpdatedAt()
+se.GetExpiredAt()
+```
+
+## Breaking changes (v2)
+
+- Module path: `github.com/vicanso/elton-session/v2`
+- Depends on `github.com/vicanso/elton/v2` and `github.com/vicanso/hes` v1
+- Config field `Expired` → `TTL`
+- Context key constant `Key` → `DefaultKey`
+- `Get` / `MustGet` → `FromContext` / `MustFromContext` (plus `FromContextKey`)
+- `Session.GetData()` → `Session.Data()`
+- `CookieConfig` cookie fields collapsed into `Cookie http.Cookie`
+- Cookie mode always forces `HttpOnly=true`; empty `Path` defaults to `"/"`
+- `LazyFetch` is honored by `NewByCookie` / `NewByHeader` (was ignored in v1)
+- Optional `Config.Key` / `CookieConfig.Key` / `HeaderConfig.Key` for a custom context key
+- Errors use hes v1 options API (`WithCategory` / `WithStatus` / `WithException`)
+- `interface{}` → `any`
+- Memory store flush: ticker is stopped on `StopFlush`; persistence uses `os.ReadFile` / `os.WriteFile`
+- Go 1.24+

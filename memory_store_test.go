@@ -24,6 +24,7 @@ package session
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -41,13 +42,13 @@ func TestMemoryStore(t *testing.T) {
 		assert := assert.New(t)
 		tmp := &MemoryStore{}
 		_, err := tmp.Get(ctx, key)
-		assert.Equal(err, ErrNotInit)
+		assert.Equal(ErrNotInit, err)
 
 		err = tmp.Set(ctx, key, data, ttl)
-		assert.Equal(err, ErrNotInit)
+		assert.Equal(ErrNotInit, err)
 
 		err = tmp.Destroy(ctx, key)
-		assert.Equal(err, ErrNotInit)
+		assert.Equal(ErrNotInit, err)
 	})
 
 	t.Run("get not exists data", func(t *testing.T) {
@@ -99,9 +100,10 @@ func TestMemoryStoreFlush(t *testing.T) {
 	ttl := 10 * time.Second
 	key := "a"
 	value := []byte("abcd")
+	saveAs := filepath.Join(t.TempDir(), "elton-session-store")
 	config := MemoryStoreConfig{
 		Size:     10,
-		SaveAs:   "/tmp/elton-session-store",
+		SaveAs:   saveAs,
 		Interval: time.Second,
 	}
 	ctx := context.Background()
@@ -110,9 +112,13 @@ func TestMemoryStoreFlush(t *testing.T) {
 	_ = store.Set(ctx, key, value, ttl)
 	time.Sleep(1100 * time.Millisecond)
 	store.StopFlush()
+	// StopFlush is idempotent
+	store.StopFlush()
+
 	store, err = NewMemoryStoreByConfig(config)
 	assert.Nil(err, "new memory store fail")
+	t.Cleanup(store.StopFlush)
 	data, err := store.Get(ctx, key)
 	assert.Nil(err)
-	assert.Equal(data, value, "load store from memory fail")
+	assert.Equal(value, data, "load store from memory fail")
 }

@@ -25,164 +25,161 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
-	"sync/atomic"
+	"os"
+	"sync"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/vicanso/hes"
 )
 
-var (
-	// ErrNotInit error not init
-	ErrNotInit = &hes.Error{
-		Message:    "client not init",
-		Category:   ErrCategory,
-		StatusCode: http.StatusInternalServerError,
-		Exception:  true,
-	}
-	defaultInterval = 60 * time.Second
+const defaultFlushInterval = 60 * time.Second
+
+// ErrNotInit is returned when MemoryStore methods are called before initialization.
+var ErrNotInit = hes.New(
+	"client not init",
+	hes.WithCategory(ErrCategory),
+	hes.WithStatus(http.StatusInternalServerError),
+	hes.WithException(),
 )
 
-const (
-	flushStatusStop = iota
-	flushStatusRunning
-)
+// MemoryStore is an in-process LRU session store with optional file persistence.
+type MemoryStore struct {
+	client *lru.Cache[string, *MemoryStoreInfo]
 
-type (
-	// MemoryStore memory store for session
-	MemoryStore struct {
-		client      *lru.Cache[string, *MemoryStoreInfo]
-		flushStatus int32
-	}
-	// MemoryStoreInfo memory store info
-	MemoryStoreInfo struct {
-		ExpiredAt int64
-		Data      []byte
-	}
-	// MemoryStoreConfig memory store config
-	MemoryStoreConfig struct {
-		Size int
-		// SaveAs save as file
-		SaveAs string
-		// Interval save interval
-		Interval time.Duration
-	}
-)
+	stopOnce sync.Once
+	stopCh   chan struct{}
+}
 
-// Get get the seesion from memory
-func (ms *MemoryStore) Get(_ context.Context, key string) (data []byte, err error) {
-	client := ms.client
-	if client == nil {
-		err = ErrNotInit
-		return
+// MemoryStoreInfo is a single cached session entry.
+type MemoryStoreInfo struct {
+	ExpiredAt int64  `json:"expiredAt"`
+	Data      []byte `json:"data"`
+}
+
+// MemoryStoreConfig configures NewMemoryStoreByConfig.
+type MemoryStoreConfig struct {
+	// Size is the max number of sessions retained by the LRU.
+	Size int
+	// SaveAs is an optional file path for periodic snapshot persistence.
+	SaveAs string
+	// Interval is the flush period when SaveAs is set. Defaults to 60s;
+	// values below 1s are clamped to the default.
+	Interval time.Duration
+}
+
+// Get returns session data from memory. Expired entries are treated as missing.
+func (ms *MemoryStore) Get(_ context.Context, key string) ([]byte, error) {
+	if ms.client == nil {
+		return nil, ErrNotInit
 	}
-	info, found := client.Get(key)
+	info, found := ms.client.Get(key)
 	if !found {
-		return
+		return nil, nil
 	}
 	if info.ExpiredAt < time.Now().Unix() {
-		return
+		return nil, nil
 	}
-	data = info.Data
-	return
+	return info.Data, nil
 }
 
-// Set set the session to memory
-func (ms *MemoryStore) Set(_ context.Context, key string, data []byte, ttl time.Duration) (err error) {
-	client := ms.client
-	if client == nil {
-		err = ErrNotInit
-		return
+// Set stores session data in memory with a TTL.
+func (ms *MemoryStore) Set(_ context.Context, key string, data []byte, ttl time.Duration) error {
+	if ms.client == nil {
+		return ErrNotInit
 	}
-	expiredAt := time.Now().Unix() + int64(ttl.Seconds())
-	info := &MemoryStoreInfo{
-		ExpiredAt: expiredAt,
+	ms.client.Add(key, &MemoryStoreInfo{
+		ExpiredAt: time.Now().Unix() + int64(ttl.Seconds()),
 		Data:      data,
-	}
-	client.Add(key, info)
-	return
+	})
+	return nil
 }
 
-// Destroy remove the session from memory
-func (ms *MemoryStore) Destroy(_ context.Context, key string) (err error) {
-	client := ms.client
-	if client == nil {
-		err = ErrNotInit
-		return
+// Destroy removes a session from memory.
+func (ms *MemoryStore) Destroy(_ context.Context, key string) error {
+	if ms.client == nil {
+		return ErrNotInit
 	}
-	client.Remove(key)
-	return
+	ms.client.Remove(key)
+	return nil
 }
 
-func (ms *MemoryStore) intervalFlush(saveAs string, interval time.Duration) {
-	client := ms.client
-	if client == nil {
-		return
+func (ms *MemoryStore) snapshot() map[string]*MemoryStoreInfo {
+	keys := ms.client.Keys()
+	now := time.Now().Unix()
+	m := make(map[string]*MemoryStoreInfo, len(keys))
+	for _, key := range keys {
+		info, found := ms.client.Get(key)
+		if !found || info.ExpiredAt < now {
+			continue
+		}
+		m[key] = info
 	}
-	atomic.StoreInt32(&ms.flushStatus, flushStatusRunning)
+	return m
+}
+
+func (ms *MemoryStore) flushLoop(saveAs string, interval time.Duration) {
 	if interval < time.Second {
-		interval = defaultInterval
+		interval = defaultFlushInterval
 	}
 	ticker := time.NewTicker(interval)
-	for range ticker.C {
-		if atomic.LoadInt32(&ms.flushStatus) == flushStatusStop {
-			return
-		}
-		keys := client.Keys()
-		m := make(map[string]*MemoryStoreInfo)
-		for _, key := range keys {
-			info, found := client.Get(key)
-			if !found {
-				continue
-			}
-			if info.ExpiredAt < time.Now().Unix() {
-				continue
-			}
-			m[key] = info
-		}
+	defer ticker.Stop()
 
-		buf, _ := json.Marshal(&m)
-		_ = ioutil.WriteFile(saveAs, buf, 0600)
+	for {
+		select {
+		case <-ms.stopCh:
+			return
+		case <-ticker.C:
+			buf, err := json.Marshal(ms.snapshot())
+			if err != nil {
+				continue
+			}
+			_ = os.WriteFile(saveAs, buf, 0o600)
+		}
 	}
 }
 
-// StopFlush stop flush
+// StopFlush stops the background file flush goroutine (idempotent).
 func (ms *MemoryStore) StopFlush() {
-	atomic.StoreInt32(&ms.flushStatus, flushStatusStop)
+	if ms.stopCh == nil {
+		return
+	}
+	ms.stopOnce.Do(func() {
+		close(ms.stopCh)
+	})
 }
 
-// NewMemoryStore create new memory store instance
-func NewMemoryStore(size int) (store *MemoryStore, err error) {
+// NewMemoryStore creates an in-memory store with the given LRU capacity.
+func NewMemoryStore(size int) (*MemoryStore, error) {
 	client, err := lru.New[string, *MemoryStoreInfo](size)
 	if err != nil {
-		return
+		return nil, err
 	}
-	store = &MemoryStore{
-		client: client,
-	}
-	return
+	return &MemoryStore{client: client}, nil
 }
 
-// NewMemoryStoreByConfig create new memory store instance by config
-func NewMemoryStoreByConfig(config MemoryStoreConfig) (store *MemoryStore, err error) {
-	store, err = NewMemoryStore(config.Size)
+// NewMemoryStoreByConfig creates a memory store and optionally restores from /
+// periodically snapshots to a file when SaveAs is set.
+func NewMemoryStoreByConfig(config MemoryStoreConfig) (*MemoryStore, error) {
+	store, err := NewMemoryStore(config.Size)
 	if err != nil {
-		return
+		return nil, err
 	}
-	file := config.SaveAs
-	if file != "" {
-		// 从文件中恢复
-		buf, _ := ioutil.ReadFile(file)
+	if config.SaveAs == "" {
+		return store, nil
+	}
+
+	if buf, err := os.ReadFile(config.SaveAs); err == nil && len(buf) > 0 {
 		m := make(map[string]*MemoryStoreInfo)
-		// 如果读取失败，则忽略
-		_ = json.Unmarshal(buf, &m)
-		for key, value := range m {
-			store.client.Add(key, value)
+		if json.Unmarshal(buf, &m) == nil {
+			for key, value := range m {
+				store.client.Add(key, value)
+			}
 		}
-		// 定时写入文件
-		go store.intervalFlush(file, config.Interval)
 	}
-	return
+
+	store.stopCh = make(chan struct{})
+	go store.flushLoop(config.SaveAs, config.Interval)
+	return store, nil
 }
